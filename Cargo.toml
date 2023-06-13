@@ -3,4 +3,13 @@ name = "chud"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "chud"
+path = "src/lib.rs"
+
 [dependencies]
+libp2p = { version = "0.51.3", features = ["macros", "noise", "wasm-bindgen", "floodsub"] }
+blake3 = "1.4.0"
+serde_json = "1.0.96"
+serde = { version = "1.0.164", features = ["derive"] }
+captcha-rs = "0.2.10"
