@@ -1,14 +1,15 @@
 use super::{super::crypto::hash::Hash, msg::Message};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 /// A caching layer for the underlying DHT of messages in the CHUD network.
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Rt {
 	messages: HashMap<Hash, Message>,
 	chains: Vec<Chain>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 struct Chain {
 	head: Hash,
 	messages: HashSet<Hash>,

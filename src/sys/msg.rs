@@ -55,7 +55,7 @@ impl MessageData {
 
 /// A message in the CHUD blockchain. Primarily constituted by arbitrary data,
 /// and newly generated and previous captcha answers.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Message {
 	data: MessageData,
 	hash: Hash,
