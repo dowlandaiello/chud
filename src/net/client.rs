@@ -19,17 +19,25 @@ use libp2p::{
 	identify::{Behaviour, Config},
 	identity,
 	kad::{record::store::MemoryStore, Kademlia, NoKnownPeers},
-	multiaddr::Error as MultiaddrError,
+	multiaddr::{Error as MultiaddrError, Protocol},
 	noise::{Config as NoiseConfig, Error as NoiseError},
-	swarm::{DialError, SwarmBuilder, SwarmEvent},
+	swarm::{DialError, Swarm, SwarmBuilder, SwarmEvent},
 	yamux::Config as YamuxConfig,
-	Multiaddr, PeerId, Transport,
+	Multiaddr, PeerId, Transport, TransportError,
 };
+#[cfg(not(target_arch = "wasm32"))]
+use libp2p::{
+	tcp::{tokio::Transport as TcpTransport, Config as TcpConfig},
+	websocket::WsConfig,
+};
+#[cfg(target_arch = "wasm32")]
 use libp2p_websys_transport::WebsocketTransport;
 use serde::{Deserialize, Serialize};
 use std::{
+	cfg,
 	error::Error as StdError,
 	fmt::{Display, Error as FmtError, Formatter},
+	net::Ipv4Addr,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -44,8 +52,7 @@ use tokio::{
 	io::{AsyncReadExt, AsyncWriteExt, Error as TokioError, Result as TokioResult},
 };
 
-#[cfg(not(target_arch = "wasm32"))]
-use std::io::ErrorKind;
+use std::io::{Error as IoError, ErrorKind};
 
 /// The name of the indexed db in which chud data is stored.
 pub const DB_NAME: &'static str = "chud_db";
@@ -59,6 +66,9 @@ pub const STATE_KEY: &'static str = "state";
 /// The name to be broadcasted by P2P peers to identify each other.
 pub const NET_PROTOCOL_PREFIX: &'static str = "chud_";
 
+/// The port for desktop clients to listen on
+pub const DAEMON_PORT: u16 = 6224;
+
 /// An error that could be encountered by the client.
 #[derive(Debug)]
 pub enum Error {
@@ -66,6 +76,7 @@ pub enum Error {
 	MultiaddrError(MultiaddrError),
 	NoKnownPeers,
 	DialError(DialError),
+	TransportError(TransportError<IoError>),
 }
 
 impl From<NoiseError> for Error {
@@ -92,6 +103,12 @@ impl From<DialError> for Error {
 	}
 }
 
+impl From<TransportError<IoError>> for Error {
+	fn from(e: TransportError<IoError>) -> Self {
+		Self::TransportError(e)
+	}
+}
+
 impl StdError for Error {
 	fn source(&self) -> Option<&(dyn StdError + 'static)> {
 		match self {
@@ -99,6 +116,7 @@ impl StdError for Error {
 			Self::MultiaddrError(e) => Some(e),
 			Self::NoKnownPeers => Some(&NoKnownPeers()),
 			Self::DialError(e) => Some(e),
+			Self::TransportError(e) => Some(e),
 		}
 	}
 }
@@ -225,18 +243,13 @@ impl Client {
 		Ok(())
 	}
 
-	/// Synchronizes and keep sthe client in sync with the network. Accepts
-	/// commands on a receiving channel for operations to perform.
-	pub async fn start(
-		&mut self,
-		mut cmd_rx: Receiver<Cmd>,
-		resp_tx: Sender<CmdResp>,
-		bootstrap_peers: &[&str],
-	) -> Result<(), Error> {
+	#[cfg(target_arch = "wasm32")]
+	fn build_swarm(&self) -> Result<Swarm<Behavior>, Error> {
 		// Use WebSockets as a transport.
 		// TODO: Use webrtc in the future for p2p in browsers
 		let local_key = identity::Keypair::generate_ed25519();
 		let local_peer_id = PeerId::from(local_key.public());
+
 		let transport = WebsocketTransport::default()
 			.upgrade(Version::V1Lazy)
 			.authenticate(NoiseConfig::new(&local_key)?)
@@ -244,7 +257,7 @@ impl Client {
 			.boxed();
 
 		// Create a swarm with the desired behavior
-		let mut swarm = {
+		{
 			let store = MemoryStore::new(local_peer_id);
 			let kad = Kademlia::new(local_peer_id, store);
 			let floodsub = Floodsub::new(local_peer_id);
@@ -253,16 +266,59 @@ impl Client {
 				local_key.public(),
 			));
 
-			SwarmBuilder::with_wasm_executor(
+			Ok(SwarmBuilder::with_wasm_executor(
 				transport,
 				Behavior::new(kad, floodsub, identify),
 				local_peer_id,
 			)
-			.build()
-		};
+			.build())
+		}
+	}
+
+	#[cfg(not(target_arch = "wasm32"))]
+	fn build_swarm(&self) -> Result<Swarm<Behavior>, Error> {
+		// Use WebSockets as a transport.
+		// TODO: Use webrtc in the future for p2p in browsers
+		let local_key = identity::Keypair::generate_ed25519();
+		let local_peer_id = PeerId::from(local_key.public());
+
+		let transport = WsConfig::new(TcpTransport::new(TcpConfig::new()))
+			.upgrade(Version::V1Lazy)
+			.authenticate(NoiseConfig::new(&local_key)?)
+			.multiplex(YamuxConfig::default())
+			.boxed();
+
+		// Create a swarm with the desired behavior
+		{
+			let store = MemoryStore::new(local_peer_id);
+			let kad = Kademlia::new(local_peer_id, store);
+			let floodsub = Floodsub::new(local_peer_id);
+			let identify = Behaviour::new(Config::new(
+				format!("{}{}", NET_PROTOCOL_PREFIX, self.chain_id),
+				local_key.public(),
+			));
+
+			Ok(SwarmBuilder::with_tokio_executor(
+				transport,
+				Behavior::new(kad, floodsub, identify),
+				local_peer_id,
+			)
+			.build())
+		}
+	}
+
+	/// Synchronizes and keep sthe client in sync with the network. Accepts
+	/// commands on a receiving channel for operations to perform.
+	pub async fn start(
+		mut self,
+		mut cmd_rx: Receiver<Cmd>,
+		resp_tx: Sender<CmdResp>,
+		bootstrap_peers: Vec<String>,
+	) -> Result<(), Error> {
+		let mut swarm = self.build_swarm()?;
 
 		// Dial all bootstrap peers
-		for multiaddr in bootstrap_peers {
+		for multiaddr in bootstrap_peers.iter() {
 			swarm
 				.dial(
 					multiaddr
@@ -270,6 +326,18 @@ impl Client {
 						.map_err(<MultiaddrError as Into<Error>>::into)?,
 				)
 				.map_err(<DialError as Into<Error>>::into)?;
+		}
+
+		if !cfg!(target_arch = "wasm32") {
+			// Listen for connections on the given port.
+			let address = Multiaddr::from(Ipv4Addr::UNSPECIFIED)
+				.with(Protocol::Tcp(DAEMON_PORT))
+				.with(Protocol::Ws("/".into()));
+			swarm
+				.listen_on(address.clone())
+				.map_err(<TransportError<IoError> as Into<Error>>::into)?;
+
+			info!("p2p client listening on {}", address);
 		}
 
 		loop {
@@ -287,7 +355,7 @@ impl Client {
 								swarm.behaviour_mut().kad_mut().add_address(&peer_id, address.clone());
 
 								// Bootstrap the DHT if we connected to one of the bootstrap addresses
-								if !self.bootstrapped && bootstrap_peers.contains(&(address.to_string().as_str())) {
+								if !self.bootstrapped && bootstrap_peers.contains(&address.to_string()) {
 									swarm.behaviour_mut().kad_mut().bootstrap().map_err(<NoKnownPeers as Into<Error>>::into)?;
 
 									self.bootstrapped = true;
@@ -342,6 +410,19 @@ mod tests {
 		let client2 = Client::load_from_disk(0).await?;
 
 		assert_eq!(client.runtime, client2.runtime);
+
+		Ok(())
+	}
+
+	#[cfg(not(target_arch = "wasm32"))]
+	#[tokio::test]
+	async fn test_start() -> Result<(), Box<dyn StdError>> {
+		let (tx, rx) = async_channel::unbounded();
+		let (tx_resp, _) = async_channel::unbounded();
+		tx.send(Cmd::Terminate).await?;
+
+		let client = Client::new(0);
+		client.start(rx, tx_resp, Vec::new()).await?;
 
 		Ok(())
 	}
