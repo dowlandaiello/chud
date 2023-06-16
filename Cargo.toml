@@ -8,7 +8,8 @@ name = "chud"
 path = "src/lib.rs"
 
 [dependencies]
-libp2p = { version = "0.51.3", features = ["macros", "noise", "wasm-bindgen", "floodsub"] }
+libp2p = { version = "0.51.3", features = ["macros", "noise", "wasm-bindgen", "floodsub", "yamux", "rendezvous", "kad", "identify"] }
+libp2p-websys-transport = "0.1.3"
 blake3 = "1.4.0"
 serde_json = "1.0.96"
 serde = { version = "1.0.164", features = ["derive"] }
@@ -18,6 +19,10 @@ web-sys = { version = "0.3.64", features = ["IdbFactory", "Window"] }
 wasm-bindgen = "0.2.87"
 serde-wasm-bindgen = "0.5.0"
 async-std = { version = "1.12.0", features = ["attributes"] }
+rand = "0.8.5"
+futures = "0.3.28"
+async-channel = "1.8.0"
+wasm-bindgen-futures = "0.4.37"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.0"
