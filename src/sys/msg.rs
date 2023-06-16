@@ -33,8 +33,8 @@ impl MessageData {
 	}
 
 	/// Gets hash of the previous message in the chain.
-	pub fn prev(&self) -> Option<Hash> {
-		self.prev
+	pub fn prev(&self) -> Option<&Hash> {
+		self.prev.as_ref()
 	}
 
 	/// Gets a reference to the new generated captcha contained in the message.
@@ -82,8 +82,8 @@ impl Message {
 	}
 
 	/// Gets the hash of the message.
-	pub fn hash(&self) -> Hash {
-		self.hash
+	pub fn hash(&self) -> &Hash {
+		&self.hash
 	}
 }
 

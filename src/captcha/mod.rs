@@ -36,6 +36,6 @@ mod tests {
 	fn test_default() {
 		let captcha = Captcha::default();
 		assert_eq!(captcha.data.is_empty(), false);
-		assert_ne!(captcha.answer, [0; 32]);
+		assert_ne!(*captcha.answer, [0; 32]);
 	}
 }

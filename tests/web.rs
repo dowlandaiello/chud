@@ -8,6 +8,7 @@ use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
 wasm_bindgen_test_configure!(run_in_browser);
 
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen_test]
 async fn test_client_load_write() -> Result<(), Box<dyn Error>> {
 	let mut client = Client::new(0);
@@ -32,6 +33,7 @@ async fn test_client_load_write() -> Result<(), Box<dyn Error>> {
 	Ok(())
 }
 
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen_test]
 async fn test_client_start() -> Result<(), Box<dyn Error>> {
 	let (tx, rx) = async_channel::unbounded();

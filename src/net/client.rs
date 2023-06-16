@@ -7,6 +7,7 @@ use super::{
 };
 use async_channel::{Receiver, Sender};
 use futures::select;
+#[cfg(target_arch = "wasm32")]
 use indexed_db_futures::{
 	idb_transaction::IdbTransaction, prelude::IdbTransactionMode, request::IdbOpenDbRequestLike,
 	IdbDatabase, IdbQuerySource, IdbVersionChangeEvent,
@@ -30,8 +31,21 @@ use std::{
 	error::Error as StdError,
 	fmt::{Display, Error as FmtError, Formatter},
 };
+
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsValue;
+
+#[cfg(target_arch = "wasm32")]
 use web_sys::DomException;
+
+#[cfg(not(target_arch = "wasm32"))]
+use tokio::{
+	fs::File,
+	io::{AsyncReadExt, AsyncWriteExt, Error as TokioError, Result as TokioResult},
+};
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::io::ErrorKind;
 
 /// The name of the indexed db in which chud data is stored.
 pub const DB_NAME: &'static str = "chud_db";
@@ -117,6 +131,7 @@ impl Client {
 	}
 
 	/// Loads the saved blockchain data from indexeddb.
+	#[cfg(target_arch = "wasm32")]
 	pub async fn load_from_disk(chain_id: usize) -> Result<Self, DomException> {
 		let mut client = Client::new(chain_id);
 
@@ -150,7 +165,25 @@ impl Client {
 		Ok(client)
 	}
 
+	/// Loads the saved blockchain data from a JSON file
+	#[cfg(not(target_arch = "wasm32"))]
+	pub async fn load_from_disk(chain_id: usize) -> TokioResult<Self> {
+		let mut client = Client::new(chain_id);
+
+		// Read the entire database file, and then deserialize it
+		if let Ok(mut f) = File::open(DB_NAME).await {
+			let mut contents = Vec::new();
+			f.read_to_end(&mut contents).await?;
+
+			client = serde_json::from_slice(contents.as_slice())
+				.map_err(|e| TokioError::new(ErrorKind::InvalidData, e))?;
+		};
+
+		Ok(client)
+	}
+
 	/// Writes the blockchain to indexeddb.
+	#[cfg(target_arch = "wasm32")]
 	pub async fn write_to_disk(&self) -> Result<(), DomException> {
 		// Create the object store if it doesn't exist
 		let mut db_req = IdbDatabase::open(DB_NAME)?;
@@ -175,6 +208,19 @@ impl Client {
 			&serde_wasm_bindgen::to_value(self)
 				.map_err(|e| DomException::from(JsValue::from_str(format!("{}", e).as_str())))?,
 		)?;
+
+		Ok(())
+	}
+
+	/// Saves the blockchain to a database file in JSON format.
+	#[cfg(not(target_arch = "wasm32"))]
+	pub async fn write_to_disk(&self) -> TokioResult<()> {
+		// Open the database file and write the serialized blockchain to it
+		let mut f = File::create(DB_NAME).await?;
+
+		let ser =
+			serde_json::to_vec(self).map_err(|e| TokioError::new(ErrorKind::InvalidData, e))?;
+		f.write_all(ser.as_slice()).await?;
 
 		Ok(())
 	}
@@ -271,11 +317,32 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
+	use super::super::super::sys::msg::{Message, MessageData};
 	use super::*;
 
 	#[test]
 	fn test_new() {
 		let client = Client::new(0);
 		assert_eq!(client.chain_id, 0);
+	}
+
+	#[cfg(not(target_arch = "wasm32"))]
+	#[tokio::test]
+	async fn test_write_load() -> Result<(), Box<dyn StdError>> {
+		let mut client = Client::new(0);
+
+		let data = MessageData::new(Vec::new(), None, String::from(""), 0);
+		let msg = Message::try_from(data)?;
+
+		// Insert the message
+		client.runtime.insert_message(msg);
+
+		// Ensure read and written clients are the same
+		client.write_to_disk().await?;
+		let client2 = Client::load_from_disk(0).await?;
+
+		assert_eq!(client.runtime, client2.runtime);
+
+		Ok(())
 	}
 }

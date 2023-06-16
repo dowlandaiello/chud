@@ -19,8 +19,8 @@ impl Rt {
 	/// Registers the message in the runtime, updating the consensus view if need be.
 	/// Assumes the message is valid per consensus rules.
 	pub fn insert_message(&mut self, msg: Message) {
-		self.update_head(msg.hash(), msg.data().prev());
-		self.messages.insert(msg.hash(), msg);
+		self.update_head(msg.hash().clone(), msg.data().prev().cloned());
+		self.messages.insert(msg.hash().clone(), msg);
 	}
 
 	/// Advances the head that is the previous node referenced by the message, or else
@@ -29,10 +29,10 @@ impl Rt {
 		// Update head that is prev to the new message,
 		// or else insert the message as a new head
 		for chain in self.chains.iter_mut() {
-			if let Some(prev) = prev {
-				if prev == chain.head {
-					chain.head = new_head;
-					chain.messages.insert(new_head);
+			if let Some(prev) = prev.as_ref() {
+				if prev == &chain.head {
+					chain.head = new_head.clone();
+					chain.messages.insert(new_head.clone());
 
 					return;
 				}
@@ -40,13 +40,13 @@ impl Rt {
 		}
 
 		self.chains.push(Chain {
-			head: new_head,
+			head: new_head.clone(),
 			messages: HashSet::from([new_head]),
 		});
 	}
 
 	/// Determines the longest chain in the runtime, returning None if no chains exist.
-	pub fn longest_chain(&self) -> Option<Hash> {
+	pub fn longest_chain(&self) -> Option<&Hash> {
 		let mut heads = self
 			.chains
 			.as_slice()
@@ -61,10 +61,10 @@ impl Rt {
 	/// Gets the message in the current chain with the indicated hash.
 	/// Returns None if the message does not exist, or if it is not in
 	/// the current chain.
-	pub fn get_message(&self, hash: Hash) -> Option<&Message> {
+	pub fn get_message(&self, hash: &Hash) -> Option<&Message> {
 		let chain = self
 			.longest_chain()
-			.and_then(|hash| self.chains.iter().find(|chain| chain.head == hash))?;
+			.and_then(|hash| self.chains.iter().find(|chain| &chain.head == hash))?;
 
 		if !chain.messages.contains(&hash) {
 			return None;
@@ -104,7 +104,7 @@ mod tests {
 		rt.insert_message(msg.clone());
 
 		assert_eq!(
-			rt.chains
+			&rt.chains
 				.get(0)
 				.ok_or("Message not found in head list.")?
 				.head,
@@ -147,7 +147,7 @@ mod tests {
 		let msg2 = Message::try_from(data2)?;
 		rt.insert_message(msg2.clone());
 
-		let data3 = MessageData::new(Vec::new(), Some(msg2.hash()), String::from(""), 1);
+		let data3 = MessageData::new(Vec::new(), Some(msg2.hash().clone()), String::from(""), 1);
 		let msg3 = Message::try_from(data3)?;
 		rt.insert_message(msg3.clone());
 
@@ -164,7 +164,7 @@ mod tests {
 	fn test_get_message() -> Result<(), Box<dyn Error>> {
 		let mut rt = Rt::default();
 
-		assert!(rt.get_message([0; 32]).is_none());
+		assert!(rt.get_message(&[0; 32].into()).is_none());
 
 		// Generate blank message
 		let data = MessageData::new(Vec::new(), None, String::from(""), 0);
@@ -180,7 +180,7 @@ mod tests {
 		let msg2 = Message::try_from(data2)?;
 		rt.insert_message(msg2.clone());
 
-		let data3 = MessageData::new(Vec::new(), Some(msg2.hash()), String::from(""), 1);
+		let data3 = MessageData::new(Vec::new(), Some(msg2.hash().clone()), String::from(""), 1);
 		let msg3 = Message::try_from(data3)?;
 		rt.insert_message(msg3.clone());
 
@@ -209,7 +209,7 @@ mod tests {
 		let msg2 = Message::try_from(data2)?;
 		rt.insert_message(msg2.clone());
 
-		let data3 = MessageData::new(Vec::new(), Some(msg2.hash()), String::from(""), 1);
+		let data3 = MessageData::new(Vec::new(), Some(msg2.hash().clone()), String::from(""), 1);
 		let msg3 = Message::try_from(data3)?;
 		rt.insert_message(msg3.clone());
 
