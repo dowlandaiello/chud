@@ -4,16 +4,19 @@ use super::{
 		sys::rt::Rt,
 	},
 	behavior::Behavior,
+	sync::{self, Error as SyncError},
+	DAEMON_PORT, DB_NAME, NET_PROTOCOL_PREFIX, RR_PROTOCOL_PREFIX, RUNTIME_STORE, STATE_KEY,
+	SYNCHRONIZATION_INTERVAL,
 };
 use async_channel::{Receiver, Sender};
-use futures::select;
+use futures::{future::FutureExt, select};
 #[cfg(target_arch = "wasm32")]
 use indexed_db_futures::{
 	idb_transaction::IdbTransaction, prelude::IdbTransactionMode, request::IdbOpenDbRequestLike,
 	IdbDatabase, IdbQuerySource, IdbVersionChangeEvent,
 };
 use libp2p::{
-	core::{upgrade::Version, ConnectedPoint},
+	core::{transport::Transport, upgrade::Version, ConnectedPoint},
 	floodsub::Floodsub,
 	futures::StreamExt,
 	identify::{Behaviour, Config},
@@ -21,9 +24,10 @@ use libp2p::{
 	kad::{record::store::MemoryStore, Kademlia, NoKnownPeers},
 	multiaddr::{Error as MultiaddrError, Protocol},
 	noise::{Config as NoiseConfig, Error as NoiseError},
-	swarm::{DialError, Swarm, SwarmBuilder, SwarmEvent},
+	request_response::{cbor::Behaviour as RRBehavior, Config as RRConfig, ProtocolSupport},
+	swarm::{DialError, StreamProtocol, Swarm, SwarmBuilder, SwarmEvent},
 	yamux::Config as YamuxConfig,
-	Multiaddr, PeerId, Transport, TransportError,
+	Multiaddr, PeerId, TransportError,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use libp2p::{
@@ -38,7 +42,9 @@ use std::{
 	error::Error as StdError,
 	fmt::{Display, Error as FmtError, Formatter},
 	net::Ipv4Addr,
+	time::Duration,
 };
+use tokio::time;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsValue;
@@ -54,21 +60,6 @@ use tokio::{
 
 use std::io::{Error as IoError, ErrorKind};
 
-/// The name of the indexed db in which chud data is stored.
-pub const DB_NAME: &'static str = "chud_db";
-
-/// The object store in which runtime data is stored.
-pub const RUNTIME_STORE: &'static str = "runtime";
-
-/// The key under the runtime store under which the state is stored.
-pub const STATE_KEY: &'static str = "state";
-
-/// The name to be broadcasted by P2P peers to identify each other.
-pub const NET_PROTOCOL_PREFIX: &'static str = "chud_";
-
-/// The port for desktop clients to listen on
-pub const DAEMON_PORT: u16 = 6224;
-
 /// An error that could be encountered by the client.
 #[derive(Debug)]
 pub enum Error {
@@ -77,6 +68,7 @@ pub enum Error {
 	NoKnownPeers,
 	DialError(DialError),
 	TransportError(TransportError<IoError>),
+	SyncError(SyncError),
 }
 
 impl From<NoiseError> for Error {
@@ -109,6 +101,12 @@ impl From<TransportError<IoError>> for Error {
 	}
 }
 
+impl From<SyncError> for Error {
+	fn from(e: SyncError) -> Self {
+		Self::SyncError(e)
+	}
+}
+
 impl StdError for Error {
 	fn source(&self) -> Option<&(dyn StdError + 'static)> {
 		match self {
@@ -117,6 +115,7 @@ impl StdError for Error {
 			Self::NoKnownPeers => Some(&NoKnownPeers()),
 			Self::DialError(e) => Some(e),
 			Self::TransportError(e) => Some(e),
+			Self::SyncError(e) => Some(e),
 		}
 	}
 }
@@ -135,6 +134,8 @@ impl Display for Error {
 pub struct Client {
 	pub runtime: Rt,
 	chain_id: usize,
+
+	// State variables
 	bootstrapped: bool,
 }
 
@@ -265,10 +266,17 @@ impl Client {
 				format!("{}{}", NET_PROTOCOL_PREFIX, self.chain_id),
 				local_key.public(),
 			));
+			let rresponse = RRBehavior::new(
+				[(
+					StreamProtocol::new(RR_PROTOCOL_PREFIX),
+					ProtocolSupport::Full,
+				)],
+				RRConfig::default(),
+			);
 
 			Ok(SwarmBuilder::with_wasm_executor(
 				transport,
-				Behavior::new(kad, floodsub, identify),
+				Behavior::new(kad, floodsub, identify, rresponse),
 				local_peer_id,
 			)
 			.build())
@@ -297,10 +305,17 @@ impl Client {
 				format!("{}{}", NET_PROTOCOL_PREFIX, self.chain_id),
 				local_key.public(),
 			));
+			let rresponse = RRBehavior::new(
+				[(
+					StreamProtocol::new(RR_PROTOCOL_PREFIX),
+					ProtocolSupport::Full,
+				)],
+				RRConfig::default(),
+			);
 
 			Ok(SwarmBuilder::with_tokio_executor(
 				transport,
-				Behavior::new(kad, floodsub, identify),
+				Behavior::new(kad, floodsub, identify, rresponse),
 				local_peer_id,
 			)
 			.build())
@@ -340,6 +355,10 @@ impl Client {
 			info!("p2p client listening on {}", address);
 		}
 
+		// Write all transactions to the DHT and synchronize the chain
+		// every n minutes
+		let mut sync_fut = time::interval(Duration::from_millis(SYNCHRONIZATION_INTERVAL));
+
 		loop {
 			select! {
 				event = swarm.select_next_some() => match event {
@@ -359,6 +378,8 @@ impl Client {
 									swarm.behaviour_mut().kad_mut().bootstrap().map_err(<NoKnownPeers as Into<Error>>::into)?;
 
 									self.bootstrapped = true;
+
+									info!("successfully bootstrapped to peer {}", peer_id);
 								}
 
 							},
@@ -377,6 +398,9 @@ impl Client {
 				cmd = cmd_rx.select_next_some() => match cmd {
 					Cmd::Terminate => break Ok(()),
 					_ => println!("{:?}", cmd),
+				},
+				_ = sync_fut.tick().fuse() => {
+					sync::upload_chain(&self.runtime, swarm.behaviour_mut().kad_mut())?;
 				}
 			}
 		}

@@ -29,6 +29,12 @@ impl Deref for Hash {
 	}
 }
 
+impl AsRef<[u8]> for Hash {
+	fn as_ref(&self) -> &[u8] {
+		self.bytes.as_slice()
+	}
+}
+
 impl Serialize for Hash {
 	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 	where

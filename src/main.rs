@@ -30,7 +30,9 @@ async fn main() {
 	let (_, rx) = async_channel::unbounded();
 	let (tx_resp, _) = async_channel::unbounded();
 
-	let client = Client::new(args.chain_id);
+	let client = Client::load_from_disk(args.chain_id)
+		.await
+		.expect("Failed to load client");
 	client
 		.start(rx, tx_resp, args.bootstrap_peers)
 		.await
