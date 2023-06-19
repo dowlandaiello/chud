@@ -5,11 +5,15 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Request {
 	/// Requests the peer for the hash of the longest chain
-	LongestChain,
+	LongestChain { query_round: usize },
 }
 
 /// A response for some information from a peer.
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Response {
-	LongestChain { height: usize, hash: Hash },
+	LongestChain {
+		height: usize,
+		hash: Hash,
+		query_round: usize,
+	},
 }

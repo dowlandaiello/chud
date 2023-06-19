@@ -12,10 +12,10 @@ pub enum Cmd {
 /// messages to the blockchain.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SubmitMsgReq {
-	data: Vec<u8>,
-	prev: Option<Hash>,
-	captcha_ans: String,
-	height: usize,
+	pub(crate) data: Vec<u8>,
+	pub(crate) prev: Option<Hash>,
+	pub(crate) captcha_ans: String,
+	pub(crate) height: usize,
 }
 
 /// RPC outputs to the CHUD CLI.

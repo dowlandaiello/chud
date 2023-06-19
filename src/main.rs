@@ -17,6 +17,9 @@ struct Args {
 
 	#[arg(short, long)]
 	bootstrap_peers: Vec<String>,
+
+	#[arg(short, long, default_value_t = 6224)]
+	port: u16,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -34,7 +37,7 @@ async fn main() {
 		.await
 		.expect("Failed to load client");
 	client
-		.start(rx, tx_resp, args.bootstrap_peers)
+		.start(rx, tx_resp, args.bootstrap_peers, args.port)
 		.await
 		.unwrap();
 }

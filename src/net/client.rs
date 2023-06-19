@@ -1,11 +1,16 @@
 use super::{
 	super::{
-		rpc::cmd::{Cmd, CmdResp},
-		sys::rt::Rt,
+		rpc::cmd::{Cmd, CmdResp, SubmitMsgReq},
+		sys::{
+			msg::{Message, MessageData},
+			rt::Rt,
+		},
+		util::nonfatal,
 	},
-	behavior::Behavior,
-	sync::{self, Error as SyncError},
-	DAEMON_PORT, DB_NAME, NET_PROTOCOL_PREFIX, RR_PROTOCOL_PREFIX, RUNTIME_STORE, STATE_KEY,
+	behavior::{Behavior, BehaviorEvent},
+	msg::{Context as MsgContext, Event as MsgEvent},
+	sync::{Context as SyncContext, Error as SyncError, Event as SyncEvent},
+	DB_NAME, NET_PROTOCOL_PREFIX, RR_PROTOCOL_PREFIX, RUNTIME_STORE, STATE_KEY,
 	SYNCHRONIZATION_INTERVAL,
 };
 use async_channel::{Receiver, Sender};
@@ -137,6 +142,13 @@ pub struct Client {
 
 	// State variables
 	bootstrapped: bool,
+
+	// Pseudo-network behaviors
+	#[serde(skip_serializing, skip_deserializing)]
+	sync_context: SyncContext,
+
+	#[serde(skip_serializing, skip_deserializing)]
+	msg_context: MsgContext,
 }
 
 impl Client {
@@ -146,6 +158,8 @@ impl Client {
 			chain_id,
 			runtime: Rt::default(),
 			bootstrapped: false,
+			sync_context: SyncContext::default(),
+			msg_context: MsgContext::default(),
 		}
 	}
 
@@ -329,6 +343,7 @@ impl Client {
 		mut cmd_rx: Receiver<Cmd>,
 		resp_tx: Sender<CmdResp>,
 		bootstrap_peers: Vec<String>,
+		listen_port: u16,
 	) -> Result<(), Error> {
 		let mut swarm = self.build_swarm()?;
 
@@ -346,7 +361,7 @@ impl Client {
 		if !cfg!(target_arch = "wasm32") {
 			// Listen for connections on the given port.
 			let address = Multiaddr::from(Ipv4Addr::UNSPECIFIED)
-				.with(Protocol::Tcp(DAEMON_PORT))
+				.with(Protocol::Tcp(listen_port))
 				.with(Protocol::Ws("/".into()));
 			swarm
 				.listen_on(address.clone())
@@ -361,9 +376,43 @@ impl Client {
 
 		loop {
 			select! {
-				event = swarm.select_next_some() => match event {
+				event = swarm.select_next_some() => {
+					match event {
 					SwarmEvent::Behaviour(event) => {
-						println!("{:?}", event);
+						// Check if the sync context has something to say about this
+						let (out_event, in_event) = self.sync_context.poll(&self.runtime, swarm.behaviour_mut().request_response_mut(), Some(event));
+						match out_event {
+							Ok(Some(e)) => match e {
+								SyncEvent::MessageCommitted(h) => {
+									info!("message {} successfully committed to the DHT", hex::encode(h));
+								},
+								SyncEvent::LongestChainUpdated { hash, .. } => {
+									self.sync_context.download_msg(&hash, swarm.behaviour_mut().kad_mut())?;
+								},
+								SyncEvent::MessageLoaded(msg) => {
+									// Download the message if it doesn't exist locally
+									if let Some(prev) = msg.data().prev() {
+										if self.runtime.get_message(prev).is_none() {
+											self.sync_context.download_msg(&prev, swarm.behaviour_mut().kad_mut())?;
+										}
+									}
+								}
+							},
+							Err(e) => error!("synchronization failed: {}", e),
+							_ => {},
+						}
+
+						// Check if the message context has something to say about this
+						let (out_event, _) = self.msg_context.poll(&mut self.runtime, swarm.behaviour_mut().floodsub_mut(), in_event);
+						match out_event {
+							Ok(Some(e)) => match e {
+								MsgEvent::MessageReceived(h) => {
+									info!("Message received: {}", hex::encode(h));
+								}
+							},
+							Err(e) => error!("message handling failed: {}", e),
+							_ => {},
+						}
 					},
 					SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
 						// Register peers in the kademlia DHT and floodsub once they're found
@@ -372,6 +421,7 @@ impl Client {
 								address, ..
 							} => {
 								swarm.behaviour_mut().kad_mut().add_address(&peer_id, address.clone());
+								swarm.behaviour_mut().request_response_mut().add_address(&peer_id, address.clone());
 
 								// Bootstrap the DHT if we connected to one of the bootstrap addresses
 								if !self.bootstrapped && bootstrap_peers.contains(&address.to_string()) {
@@ -379,7 +429,7 @@ impl Client {
 
 									self.bootstrapped = true;
 
-									info!("successfully bootstrapped to peer {}", peer_id);
+									info!("successfully bootstrapped to peer {}", &peer_id);
 								}
 
 							},
@@ -388,19 +438,27 @@ impl Client {
 
 						swarm.behaviour_mut().floodsub_mut().add_node_to_partial_view(peer_id);
 					},
-					SwarmEvent::ConnectionClosed { peer_id, ..} => {
+					SwarmEvent::ConnectionClosed { peer_id, endpoint, .. } => {
 						// Remove disconnected peers
 						swarm.behaviour_mut().kad_mut().remove_peer(&peer_id);
 						swarm.behaviour_mut().floodsub_mut().remove_node_from_partial_view(&peer_id);
+
+						// Remove the request-response peer
+						if let ConnectedPoint::Dialer { address, .. } = endpoint {
+							swarm.behaviour_mut().request_response_mut().remove_address(&peer_id, &address);
+						}
 					}
 					_ => {}
-				},
+				}},
 				cmd = cmd_rx.select_next_some() => match cmd {
 					Cmd::Terminate => break Ok(()),
-					_ => println!("{:?}", cmd),
+					Cmd::SubmitMsg(SubmitMsgReq{ data, prev, captcha_ans, height}) => {
+						let msg = nonfatal!(Message::try_from(MessageData::new(data, prev, captcha_ans, height)), "Failed to construct message: {}");
+						nonfatal!(self.msg_context.submit_message(msg, swarm.behaviour_mut().floodsub_mut()), "Failed to submit message: {}");
+					},
 				},
 				_ = sync_fut.tick().fuse() => {
-					sync::upload_chain(&self.runtime, swarm.behaviour_mut().kad_mut())?;
+					nonfatal!(self.sync_context.upload_chain(&self.runtime, swarm.behaviour_mut().kad_mut()), "Failed to upload chain: {}");
 				}
 			}
 		}

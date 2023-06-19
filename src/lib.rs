@@ -6,6 +6,7 @@ pub mod crypto;
 pub mod net;
 pub mod rpc;
 pub mod sys;
+pub mod util;
 
 #[cfg(target_arch = "wasm32")]
 use async_channel::{Receiver, Sender};
