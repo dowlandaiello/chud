@@ -2,6 +2,7 @@ use chud::net::client::Client;
 
 #[cfg(not(target_arch = "wasm32"))]
 use clap::{arg, command, Parser};
+use libp2p::Multiaddr;
 
 /// Arguments to chudd:
 /// --chain-id: The unique segregator for the blockchain. Should be the same
@@ -20,6 +21,9 @@ struct Args {
 
 	#[arg(short, long, default_value_t = 6224)]
 	port: u16,
+
+	#[arg(short, long)]
+	external_addrs: Vec<String>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -37,7 +41,16 @@ async fn main() {
 		.await
 		.expect("Failed to load client");
 	client
-		.start(rx, tx_resp, args.bootstrap_peers, args.port)
+		.start(
+			rx,
+			tx_resp,
+			args.bootstrap_peers,
+			args.port,
+			args.external_addrs
+				.into_iter()
+				.filter_map(|s| s.parse().ok())
+				.collect::<Vec<Multiaddr>>(),
+		)
 		.await
 		.unwrap();
 }

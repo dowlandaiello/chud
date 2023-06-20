@@ -65,6 +65,9 @@ impl Context {
 			// Possible floodsub message topics:
 			// - new_msg
 			Some(BehaviorEvent::Floodsub(FloodsubEvent::Message(fs_msg))) => {
+				// TODO: consensus
+				// - Ensure hash is valid
+				// - Ensure timestamp is valid
 				// A new message has been received
 				if fs_msg.topics.contains(&Topic::new(FLOODSUB_MESSAGE_TOPIC)) {
 					if let Ok(msg) = serde_json::from_slice::<Message>(&fs_msg.data) {

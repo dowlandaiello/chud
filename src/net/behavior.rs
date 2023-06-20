@@ -3,8 +3,10 @@ use libp2p::{
 	floodsub::Floodsub,
 	identify::Behaviour,
 	kad::{record::store::MemoryStore, Kademlia},
-	swarm::NetworkBehaviour,
+	ping::Behaviour as PingBehavior,
+	swarm::{keep_alive::Behaviour as KeepaliveBehavior, NetworkBehaviour},
 };
+use libp2p_autonat::Behaviour as NATBehavior;
 use libp2p_request_response::cbor::Behaviour as RRBehavior;
 
 /// Network behavior combining floodsub, KAD DHT, and identify network behaviors.
@@ -14,6 +16,9 @@ pub struct Behavior {
 	floodsub: Floodsub,
 	identify: Behaviour,
 	rresponse: RRBehavior<Request, Response>,
+	ping: PingBehavior,
+	keep_alive: KeepaliveBehavior,
+	autonat: NATBehavior,
 }
 
 impl Behavior {
@@ -23,12 +28,18 @@ impl Behavior {
 		floodsub: Floodsub,
 		identify: Behaviour,
 		request_response: RRBehavior<Request, Response>,
+		ping: PingBehavior,
+		keep_alive: KeepaliveBehavior,
+		autonat: NATBehavior,
 	) -> Self {
 		Self {
 			kad,
 			floodsub,
 			identify,
 			rresponse: request_response,
+			ping,
+			keep_alive,
+			autonat,
 		}
 	}
 

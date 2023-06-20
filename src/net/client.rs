@@ -29,11 +29,17 @@ use libp2p::{
 	kad::{record::store::MemoryStore, Kademlia, NoKnownPeers},
 	multiaddr::{Error as MultiaddrError, Protocol},
 	noise::{Config as NoiseConfig, Error as NoiseError},
+	ping::Behaviour as PingBehavior,
 	request_response::{cbor::Behaviour as RRBehavior, Config as RRConfig, ProtocolSupport},
-	swarm::{DialError, StreamProtocol, Swarm, SwarmBuilder, SwarmEvent},
-	yamux::Config as YamuxConfig,
+	swarm::{
+		keep_alive::Behaviour as KeepaliveBehavior, DialError, StreamProtocol, Swarm, SwarmBuilder,
+		SwarmEvent,
+	},
 	Multiaddr, PeerId, TransportError,
 };
+use libp2p_autonat::{Behaviour as NATBehavior, Config as NATConfig};
+use libp2p_mplex::MplexConfig;
+
 #[cfg(not(target_arch = "wasm32"))]
 use libp2p::{
 	tcp::{tokio::Transport as TcpTransport, Config as TcpConfig},
@@ -268,7 +274,7 @@ impl Client {
 		let transport = WebsocketTransport::default()
 			.upgrade(Version::V1Lazy)
 			.authenticate(NoiseConfig::new(&local_key)?)
-			.multiplex(YamuxConfig::default())
+			.multiplex(MpelxConfig::default())
 			.boxed();
 
 		// Create a swarm with the desired behavior
@@ -287,10 +293,15 @@ impl Client {
 				)],
 				RRConfig::default(),
 			);
+			let ping = PingBehavior::default();
+			let keep_alive = KeepaliveBehavior::default();
+			let autonat = NATBehavior::new(local_peer_id, NATConfig::default());
 
 			Ok(SwarmBuilder::with_wasm_executor(
 				transport,
-				Behavior::new(kad, floodsub, identify, rresponse),
+				Behavior::new(
+					kad, floodsub, identify, rresponse, ping, keep_alive, autonat,
+				),
 				local_peer_id,
 			)
 			.build())
@@ -307,7 +318,7 @@ impl Client {
 		let transport = WsConfig::new(TcpTransport::new(TcpConfig::new()))
 			.upgrade(Version::V1Lazy)
 			.authenticate(NoiseConfig::new(&local_key)?)
-			.multiplex(YamuxConfig::default())
+			.multiplex(MplexConfig::default())
 			.boxed();
 
 		// Create a swarm with the desired behavior
@@ -326,10 +337,15 @@ impl Client {
 				)],
 				RRConfig::default(),
 			);
+			let ping = PingBehavior::default();
+			let keep_alive = KeepaliveBehavior::default();
+			let autonat = NATBehavior::new(local_peer_id, NATConfig::default());
 
 			Ok(SwarmBuilder::with_tokio_executor(
 				transport,
-				Behavior::new(kad, floodsub, identify, rresponse),
+				Behavior::new(
+					kad, floodsub, identify, rresponse, ping, keep_alive, autonat,
+				),
 				local_peer_id,
 			)
 			.build())
@@ -344,8 +360,13 @@ impl Client {
 		resp_tx: Sender<CmdResp>,
 		bootstrap_peers: Vec<String>,
 		listen_port: u16,
+		external_addresses: Vec<Multiaddr>,
 	) -> Result<(), Error> {
 		let mut swarm = self.build_swarm()?;
+
+		for external_addr in external_addresses {
+			swarm.add_external_address(external_addr);
+		}
 
 		// Dial all bootstrap peers
 		for multiaddr in bootstrap_peers.iter() {
