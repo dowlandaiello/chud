@@ -9,8 +9,8 @@ pub struct MessageData {
 	data: Vec<u8>,
 	prev: Option<Hash>,
 	new_captcha: Captcha,
-	captcha_ans: String,
-	captcha_src: Hash,
+	captcha_ans: Option<String>,
+	captcha_src: Option<Hash>,
 	height: usize,
 	timestamp: u128,
 }
@@ -22,8 +22,8 @@ impl MessageData {
 	pub fn new(
 		data: Vec<u8>,
 		prev: Option<Hash>,
-		captcha_ans: String,
-		captcha_src: Hash,
+		captcha_ans: Option<String>,
+		captcha_src: Option<Hash>,
 		height: usize,
 		timestamp: u128,
 	) -> Self {
@@ -54,13 +54,13 @@ impl MessageData {
 	}
 
 	/// Gets a reference to the answer to the derived captcha from the message.
-	pub fn captcha_ans(&self) -> &str {
-		self.captcha_ans.as_str()
+	pub fn captcha_ans(&self) -> Option<&str> {
+		self.captcha_ans.as_deref()
 	}
 
 	/// Gets a reference to the hash of the message from which the captcha is derived that this message is answering.
-	pub fn captcha_src(&self) -> &Hash {
-		&self.captcha_src
+	pub fn captcha_src(&self) -> Option<&Hash> {
+		self.captcha_src.as_ref()
 	}
 
 	/// Gets the index of the message in the chain. Should be prev.height + 1.

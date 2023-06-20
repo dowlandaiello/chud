@@ -474,8 +474,14 @@ impl Client {
 				cmd = cmd_rx.select_next_some() => match cmd {
 					Cmd::Terminate => break Ok(()),
 					Cmd::SubmitMsg(SubmitMsgReq{ data, prev, captcha_ans,captcha_src, height, timestamp}) => {
-						let msg = nonfatal!(Message::try_from(MessageData::new(data, prev, captcha_ans, captcha_src, height, timestamp)), "Failed to construct message: {}");
-						nonfatal!(self.msg_context.submit_message(msg, swarm.behaviour_mut().floodsub_mut()), "Failed to submit message: {}");
+						let msg = nonfatal!(Message::try_from(MessageData::new(data, prev, Some(captcha_ans), Some(captcha_src), height, timestamp)), "Failed to construct message: {}");
+						let hash = msg.hash().clone();
+						match self.msg_context.submit_message(msg, swarm.behaviour_mut().floodsub_mut()) {
+							Ok(_) => {
+								nonfatal!(resp_tx.send(CmdResp::MsgSubmitted(hash)).await, "Failed to send to RPC channel: {}");
+							},
+							Err(e) => error!("Failed to submit message {}: {}", hex::encode(hash), e),
+						}
 					},
 				},
 				_ = sync_fut.tick().fuse() => {
