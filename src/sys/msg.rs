@@ -115,16 +115,16 @@ mod tests {
 
 	#[test]
 	fn test_new() {
-		let data = MessageData::new(Vec::new(), None, String::from(""), 0, 0);
+		let data = MessageData::new(Vec::new(), None, None, None, 0, 0);
 		assert_eq!(data.data, <Vec<u8>>::new());
 		assert_eq!(data.prev, None);
-		assert_eq!(data.captcha_ans, String::from(""));
+		assert_eq!(data.captcha_ans, None);
 		assert_eq!(data.timestamp, 0);
 	}
 
 	#[test]
 	fn test_try_from() -> Result<(), Error> {
-		let data = MessageData::new(Vec::new(), None, String::from(""), 0, 0);
+		let data = MessageData::new(Vec::new(), None, None, None, 0, 0);
 		let _ = Message::try_from(data)?;
 
 		Ok(())

@@ -97,7 +97,7 @@ mod tests {
 		let mut rt = Rt::default();
 
 		// Generate blank message
-		let data = MessageData::new(Vec::new(), None, String::from(""), 0);
+		let data = MessageData::new(Vec::new(), None, None, None, 0, 0);
 		let msg = Message::try_from(data)?;
 
 		// Insert the message
@@ -131,7 +131,7 @@ mod tests {
 		let mut rt = Rt::default();
 
 		// Generate blank message
-		let data = MessageData::new(Vec::new(), None, String::from(""), 0);
+		let data = MessageData::new(Vec::new(), None, None, None, 0, 0);
 		let msg = Message::try_from(data)?;
 
 		// Insert the message
@@ -143,11 +143,11 @@ mod tests {
 		);
 
 		// Make another chain
-		let data2 = MessageData::new(Vec::new(), None, String::from(""), 0);
+		let data2 = MessageData::new(Vec::new(), None, None, None, 0, 0);
 		let msg2 = Message::try_from(data2)?;
 		rt.insert_message(msg2.clone());
 
-		let data3 = MessageData::new(Vec::new(), Some(msg2.hash().clone()), String::from(""), 1);
+		let data3 = MessageData::new(Vec::new(), Some(msg2.hash().clone()), None, None, 1, 0);
 		let msg3 = Message::try_from(data3)?;
 		rt.insert_message(msg3.clone());
 
@@ -167,7 +167,7 @@ mod tests {
 		assert!(rt.get_message(&[0; 32].into()).is_none());
 
 		// Generate blank message
-		let data = MessageData::new(Vec::new(), None, String::from(""), 0);
+		let data = MessageData::new(Vec::new(), None, None, None, 0, 0);
 		let msg = Message::try_from(data)?;
 
 		// Insert the message
@@ -176,11 +176,11 @@ mod tests {
 		assert_eq!(rt.get_message(msg.hash()), Some(&msg));
 
 		// Make another chain
-		let data2 = MessageData::new(Vec::new(), None, String::from(""), 0);
+		let data2 = MessageData::new(Vec::new(), None, None, None, 0, 0);
 		let msg2 = Message::try_from(data2)?;
 		rt.insert_message(msg2.clone());
 
-		let data3 = MessageData::new(Vec::new(), Some(msg2.hash().clone()), String::from(""), 1);
+		let data3 = MessageData::new(Vec::new(), Some(msg2.hash().clone()), None, None, 1, 0);
 		let msg3 = Message::try_from(data3)?;
 		rt.insert_message(msg3.clone());
 
@@ -196,7 +196,7 @@ mod tests {
 		let mut rt = Rt::default();
 
 		// Generate blank message
-		let data = MessageData::new(Vec::new(), None, String::from(""), 0);
+		let data = MessageData::new(Vec::new(), None, None, None, 0, 0);
 		let msg = Message::try_from(data)?;
 
 		// Insert the message
@@ -205,11 +205,11 @@ mod tests {
 		assert_eq!(rt.head(), Some(&msg));
 
 		// Make another chain
-		let data2 = MessageData::new(Vec::new(), None, String::from(""), 0);
+		let data2 = MessageData::new(Vec::new(), None, None, None, 0, 0);
 		let msg2 = Message::try_from(data2)?;
 		rt.insert_message(msg2.clone());
 
-		let data3 = MessageData::new(Vec::new(), Some(msg2.hash().clone()), String::from(""), 1);
+		let data3 = MessageData::new(Vec::new(), Some(msg2.hash().clone()), None, None, 1, 0);
 		let msg3 = Message::try_from(data3)?;
 		rt.insert_message(msg3.clone());
 

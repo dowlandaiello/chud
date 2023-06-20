@@ -23,7 +23,7 @@ use indexed_db_futures::{
 use libp2p::{
 	core::{transport::Transport, upgrade::Version, ConnectedPoint},
 	floodsub::Floodsub,
-	futures::StreamExt,
+	futures::{Stream, StreamExt},
 	identify::{Behaviour, Config},
 	identity,
 	kad::{record::store::MemoryStore, Kademlia, NoKnownPeers},
@@ -40,6 +40,7 @@ use libp2p::{
 use libp2p_autonat::{Behaviour as NATBehavior, Config as NATConfig};
 use libp2p_mplex::MplexConfig;
 
+use instant::Duration;
 #[cfg(not(target_arch = "wasm32"))]
 use libp2p::{
 	tcp::{tokio::Transport as TcpTransport, Config as TcpConfig},
@@ -53,9 +54,8 @@ use std::{
 	error::Error as StdError,
 	fmt::{Display, Error as FmtError, Formatter},
 	net::Ipv4Addr,
-	time::Duration,
 };
-use tokio::time;
+use wasm_timer::Interval;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsValue;
@@ -274,7 +274,7 @@ impl Client {
 		let transport = WebsocketTransport::default()
 			.upgrade(Version::V1Lazy)
 			.authenticate(NoiseConfig::new(&local_key)?)
-			.multiplex(MpelxConfig::default())
+			.multiplex(MplexConfig::default())
 			.boxed();
 
 		// Create a swarm with the desired behavior
@@ -359,7 +359,7 @@ impl Client {
 		mut cmd_rx: Receiver<Cmd>,
 		resp_tx: Sender<CmdResp>,
 		bootstrap_peers: Vec<String>,
-		listen_port: u16,
+		listen_port: Option<u16>,
 		external_addresses: Vec<Multiaddr>,
 	) -> Result<(), Error> {
 		let mut swarm = self.build_swarm()?;
@@ -379,7 +379,7 @@ impl Client {
 				.map_err(<DialError as Into<Error>>::into)?;
 		}
 
-		if !cfg!(target_arch = "wasm32") {
+		if let Some(listen_port) = listen_port {
 			// Listen for connections on the given port.
 			let address = Multiaddr::from(Ipv4Addr::UNSPECIFIED)
 				.with(Protocol::Tcp(listen_port))
@@ -393,7 +393,7 @@ impl Client {
 
 		// Write all transactions to the DHT and synchronize the chain
 		// every n minutes
-		let mut sync_fut = time::interval(Duration::from_millis(SYNCHRONIZATION_INTERVAL));
+		let mut sync_fut = Interval::new(Duration::from_millis(SYNCHRONIZATION_INTERVAL)).fuse();
 
 		loop {
 			select! {
@@ -484,7 +484,7 @@ impl Client {
 						}
 					},
 				},
-				_ = sync_fut.tick().fuse() => {
+				_ = sync_fut.next() => {
 					nonfatal!(self.sync_context.upload_chain(&self.runtime, swarm.behaviour_mut().kad_mut()), "Failed to upload chain: {}");
 				}
 			}
@@ -508,7 +508,7 @@ mod tests {
 	async fn test_write_load() -> Result<(), Box<dyn StdError>> {
 		let mut client = Client::new(0);
 
-		let data = MessageData::new(Vec::new(), None, String::from(""), 0);
+		let data = MessageData::new(Vec::new(), None, None, None, 0, 0);
 		let msg = Message::try_from(data)?;
 
 		// Insert the message
@@ -531,7 +531,9 @@ mod tests {
 		tx.send(Cmd::Terminate).await?;
 
 		let client = Client::new(0);
-		client.start(rx, tx_resp, Vec::new()).await?;
+		client
+			.start(rx, tx_resp, Vec::new(), Some(6224), Vec::new())
+			.await?;
 
 		Ok(())
 	}

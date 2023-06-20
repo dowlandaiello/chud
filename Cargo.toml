@@ -33,6 +33,8 @@ wasm-bindgen-futures = "0.4.37"
 hex = "0.4.3"
 log = "0.4.19"
 lazy_static = "1.4.0"
+instant = "0.1"
+wasm-timer = "0.2.5"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.28.2", features = ["fs", "io-util", "rt", "macros", "rt-multi-thread", "time"] }
@@ -44,6 +46,7 @@ clap = { version = "4.3.4", features = ["derive"] }
 libp2p-websys-transport = { git = "https://github.com/dowlandaiello/libp2p-websys-transport.git" }
 tokio = { version = "1.28.2", features = ["time"] }
 wasm-logger = "0.2.0"
+instant = { verion = "0.1", features = ["wasm-bindgen"] }
 
 [patch.crates-io]
 libp2p-core = { git = "https://github.com/libp2p/rust-libp2p.git" }

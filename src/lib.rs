@@ -41,7 +41,13 @@ pub fn start(chain_id: usize, bootstrap_nodes: Vec<js_sys::JsString>) {
 	let mut client = net::client::Client::new(chain_id);
 	wasm_bindgen_futures::spawn_local(
 		client
-			.start(CMD_RX_TX.1.clone(), RESP_RX_TX.0.clone(), nodes_owned)
+			.start(
+				CMD_RX_TX.1.clone(),
+				RESP_RX_TX.0.clone(),
+				nodes_owned,
+				None,
+				Vec::new(),
+			)
 			.map(|_| ()),
 	);
 }

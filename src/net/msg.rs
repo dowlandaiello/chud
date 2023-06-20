@@ -11,7 +11,6 @@ use serde_json::Error as SerdeError;
 use std::{
 	error::Error as StdError,
 	fmt::{Display, Error as FmtError, Formatter},
-	time::{SystemTime, UNIX_EPOCH},
 };
 
 /// Events emitted by the message behavior
@@ -110,11 +109,7 @@ impl Context {
 	/// - The captcha answer in the message is valid
 	fn follows_consensus_rules(&self, rt: &Rt, msg: &Message) -> bool {
 		// Ensure the message was made before now
-		if !SystemTime::now()
-			.duration_since(UNIX_EPOCH)
-			.map(|current_time| msg.data().timestamp() < current_time.as_millis())
-			.unwrap_or_default()
-		{
+		if instant::now() < msg.data().timestamp() as f64 {
 			return false;
 		};
 

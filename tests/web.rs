@@ -13,7 +13,7 @@ wasm_bindgen_test_configure!(run_in_browser);
 async fn test_client_load_write() -> Result<(), Box<dyn Error>> {
 	let mut client = Client::new(0);
 
-	let data = MessageData::new(Vec::new(), None, String::from(""), 0);
+	let data = MessageData::new(Vec::new(), None, None, None, 0, 0);
 	let msg = Message::try_from(data)?;
 
 	// Insert the message
@@ -41,7 +41,9 @@ async fn test_client_start() -> Result<(), Box<dyn Error>> {
 	tx.send(Cmd::Terminate).await?;
 
 	let mut client = Client::new(0);
-	client.start(rx, tx_resp, Vec::new()).await?;
+	client
+		.start(rx, tx_resp, Vec::new(), None, Vec::new())
+		.await?;
 
 	Ok(())
 }

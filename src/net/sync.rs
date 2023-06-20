@@ -7,6 +7,7 @@ use super::{
 	req::{Request, Response},
 	DHT_QUORUM, SAMPLING_SIZE, SYNCHRONIZATION_TIMEOUT,
 };
+use instant::{Duration, Instant};
 use libp2p::{
 	kad::{
 		record::store::Error as KadError, store::MemoryStore, GetRecordOk, Kademlia, KademliaEvent,
@@ -20,7 +21,6 @@ use std::{
 	collections::{HashMap, HashSet},
 	error::Error as StdError,
 	fmt::{Display, Error as FmtError, Formatter},
-	time::{Duration, Instant},
 };
 
 /// Events emitted by the synchronization behavior

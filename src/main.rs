@@ -45,7 +45,7 @@ async fn main() {
 			rx,
 			tx_resp,
 			args.bootstrap_peers,
-			args.port,
+			Some(args.port),
 			args.external_addrs
 				.into_iter()
 				.filter_map(|s| s.parse().ok())
