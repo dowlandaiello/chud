@@ -12,7 +12,13 @@ pub mod util;
 use async_channel::{Receiver, Sender};
 
 #[cfg(target_arch = "wasm32")]
-use rpc::cmd::{Cmd, CmdResp};
+use crypto::hash::Hash;
+#[cfg(target_arch = "wasm32")]
+use net::client::Error;
+#[cfg(target_arch = "wasm32")]
+use rpc::cmd::{Cmd, CmdResp, LoadMsgReq, SubmitMsgReq};
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsValue;
 
 #[cfg(target_arch = "wasm32")]
 use futures::future::FutureExt;
@@ -50,4 +56,85 @@ pub fn start(chain_id: usize, bootstrap_nodes: Vec<js_sys::JsString>) {
 			)
 			.map(|_| ()),
 	);
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub async fn submit_message(msg_data: wasm_bindgen::JsValue) -> Result<String, String> {
+	let msg = serde_wasm_bindgen::from_value(msg_data)
+		.map_err(|e| Error::SerdeWasmError(e))
+		.map_err(|e| e.to_string())?;
+	let req_id = instant::now() as usize;
+	CMD_RX_TX
+		.0
+		.send(Cmd::SubmitMsg { req: msg, req_id })
+		.await
+		.map_err(|e| e.to_string())?;
+
+	loop {
+		match RESP_RX_TX.1.recv().await.map_err(|e| e.to_string())? {
+			CmdResp::MsgSubmitted {
+				hash: h,
+				req_id: resp_id,
+			} => {
+				if resp_id == req_id {
+					return Ok(hex::encode(h));
+				}
+			}
+			CmdResp::Error {
+				error,
+				req_id: resp_id,
+			} => {
+				if req_id == resp_id {
+					return Err(format!("Failed to submit the message: {}", error));
+				}
+			}
+			_ => continue,
+		}
+	}
+}
+
+/// Gets a JSON encoding of the message with the given hash.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub async fn load_message(hash_str: &str) -> Result<JsValue, String> {
+	let hash_bytes = hex::decode(hash_str).map_err(|e| e.to_string())?;
+	let mut hash_bytes_arr: [u8; 32] = [0; 32];
+
+	for i in 0..32 {
+		hash_bytes_arr[i] = hash_bytes[i];
+	}
+
+	let hash: Hash = hash_bytes_arr.into();
+	let req_id = instant::now() as usize;
+	CMD_RX_TX
+		.0
+		.send(Cmd::LoadMsg {
+			req: LoadMsgReq { hash },
+			req_id: req_id as usize,
+		})
+		.await
+		.map_err(|e| e.to_string())?;
+
+	loop {
+		match RESP_RX_TX.1.recv().await.map_err(|e| e.to_string())? {
+			CmdResp::MsgLoaded {
+				msg,
+				req_id: resp_id,
+			} => {
+				if resp_id == req_id as usize {
+					return Ok(serde_wasm_bindgen::to_value(&msg).map_err(|e| e.to_string())?);
+				}
+			}
+			CmdResp::Error {
+				error,
+				req_id: resp_id,
+			} => {
+				if resp_id == req_id as usize {
+					return Err(format!("Error occurred while loading message: {}", error));
+				}
+			}
+			_ => continue,
+		}
+	}
 }

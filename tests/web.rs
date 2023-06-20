@@ -47,3 +47,11 @@ async fn test_client_start() -> Result<(), Box<dyn Error>> {
 
 	Ok(())
 }
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+async fn test_start() -> Result<(), Box<dyn Error>> {
+	chud::start(0, Vec::new());
+
+	Ok(())
+}

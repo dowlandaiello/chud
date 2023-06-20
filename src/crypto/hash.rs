@@ -3,11 +3,18 @@ use serde::{
 	Deserialize, Deserializer, Serialize, Serializer,
 };
 use std::{fmt, ops::Deref};
+use wasm_bindgen::JsValue;
 
 /// A hex-encoded, non-0x padded SHA-256 hash.
 #[derive(Hash, PartialEq, Eq, Debug, Clone)]
 pub struct Hash {
 	bytes: [u8; 32],
+}
+
+impl Into<JsValue> for Hash {
+	fn into(self) -> JsValue {
+		JsValue::from_str(hex::encode(self).as_str())
+	}
 }
 
 impl From<blake3::Hash> for Hash {

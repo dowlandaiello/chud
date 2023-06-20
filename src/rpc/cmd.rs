@@ -1,10 +1,11 @@
-use super::super::crypto::hash::Hash;
+use super::super::{crypto::hash::Hash, sys::msg::Message};
 use serde::{Deserialize, Serialize};
 
 /// RPC inputs to the CHUD CLI.
 #[derive(Debug)]
 pub enum Cmd {
-	SubmitMsg(SubmitMsgReq),
+	SubmitMsg { req: SubmitMsgReq, req_id: usize },
+	LoadMsg { req: LoadMsgReq, req_id: usize },
 	Terminate,
 }
 
@@ -20,7 +21,15 @@ pub struct SubmitMsgReq {
 	pub(crate) timestamp: u128,
 }
 
+/// A request to load a message with a particular hash.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct LoadMsgReq {
+	pub(crate) hash: Hash,
+}
+
 /// RPC outputs to the CHUD CLI.
 pub enum CmdResp {
-	MsgSubmitted(Hash),
+	MsgSubmitted { hash: Hash, req_id: usize },
+	MsgLoaded { msg: Message, req_id: usize },
+	Error { error: String, req_id: usize },
 }

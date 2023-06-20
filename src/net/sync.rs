@@ -40,6 +40,12 @@ pub enum Event {
 		// The length of the longest chain
 		height: usize,
 	},
+
+	/// Emitted when a message is successfully loaded
+	MessageLoadCompleted { msg: Message, req_id: usize },
+
+	/// Emitted when a message fails to load
+	MessageLoadFailed { req_id: usize },
 }
 
 /// Any error that may occur while synchronizing the blockchain.
@@ -89,6 +95,9 @@ pub struct Context {
 
 	// Download requests
 	message_downloads: HashSet<QueryId>,
+
+	// Load requests
+	message_loads: HashMap<QueryId, usize>,
 }
 
 // The state of a round of questioning regarding the longest chain
@@ -132,6 +141,27 @@ impl Context {
 								return (Ok(Some(Event::MessageLoaded(msg))), None);
 							}
 						}
+					} else if let Some(req_id) = self.message_loads.remove(&id) {
+						// We previously requested to load a message.
+						// Use the according event type
+
+						// We successfully found the message
+						match result {
+							QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(record))) => {
+								if let Ok(msg) =
+									serde_json::from_slice(record.record.value.as_slice())
+								{
+									// Notify the user that the message was found
+									return (
+										Ok(Some(Event::MessageLoadCompleted { msg, req_id })),
+										None,
+									);
+								}
+							}
+							_ => {}
+						}
+
+						return (Ok(Some(Event::MessageLoadFailed { req_id })), None);
 					}
 
 					(Ok(None), None)
@@ -308,6 +338,19 @@ impl Context {
 	) -> Result<(), Error> {
 		let q_id = kad.get_record(RecordKey::new(&head.as_ref()));
 		self.message_downloads.insert(q_id);
+
+		Ok(())
+	}
+
+	/// Initiates a download of the singular message.
+	pub fn load_msg(
+		&mut self,
+		msg: &Hash,
+		kad: &mut Kademlia<MemoryStore>,
+		req_id: usize,
+	) -> Result<(), Error> {
+		let q_id = kad.get_record(RecordKey::new(&msg.as_ref()));
+		self.message_loads.insert(q_id, req_id);
 
 		Ok(())
 	}

@@ -12,17 +12,13 @@ CHUD, the checkpoint of humanity underlying datastore, is a WebAssembly module i
 
 CHUD is primarily queried, and written to using the described API made available by the exports of the respective WebAssembly module:
 
-*** ~set_checkpoint(cid: String)~
+*** ~submit_message(message: Message) -> Hash~
 
-Bootstraps the blockchain from the blockchain ending at the node with cid ~cid~. Resets all queryable data to be within the context of the new blockchain.
+Submits the JSON-encoded message, ~message~ to the blockchain. Returns the hash of the submitted message.
 
-*** ~submit_message(message: Message) -> CID~
+*** ~load_message(hash: String) -> Message~
 
-Submits the JSON-encoded message, ~message~ to the blockchain. Returns the cid of the submitted message.
-
-*** ~load_message(cid: String) -> Message~
-
-Loads the message with the given CID from the blockchain. Returns a JSON encoding of the message.
+Loads the message with the given Hash from the blockchain. Returns a JSON encoding of the message.
 
 *** ~listen_messages() -> AsyncIterable<Message>~
 

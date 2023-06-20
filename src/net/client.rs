@@ -1,6 +1,6 @@
 use super::{
 	super::{
-		rpc::cmd::{Cmd, CmdResp, SubmitMsgReq},
+		rpc::cmd::{Cmd, CmdResp, LoadMsgReq, SubmitMsgReq},
 		sys::{
 			msg::{Message, MessageData},
 			rt::Rt,
@@ -13,7 +13,7 @@ use super::{
 	DB_NAME, NET_PROTOCOL_PREFIX, RR_PROTOCOL_PREFIX, RUNTIME_STORE, STATE_KEY,
 	SYNCHRONIZATION_INTERVAL,
 };
-use async_channel::{Receiver, Sender};
+use async_channel::{Receiver, RecvError, Sender};
 use futures::{future::FutureExt, select};
 #[cfg(target_arch = "wasm32")]
 use indexed_db_futures::{
@@ -39,6 +39,7 @@ use libp2p::{
 };
 use libp2p_autonat::{Behaviour as NATBehavior, Config as NATConfig};
 use libp2p_mplex::MplexConfig;
+use serde_wasm_bindgen::Error as SerdeWasmError;
 
 use instant::Duration;
 #[cfg(not(target_arch = "wasm32"))]
@@ -57,7 +58,6 @@ use std::{
 };
 use wasm_timer::Interval;
 
-#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsValue;
 
 #[cfg(target_arch = "wasm32")]
@@ -80,6 +80,14 @@ pub enum Error {
 	DialError(DialError),
 	TransportError(TransportError<IoError>),
 	SyncError(SyncError),
+	SerdeWasmError(SerdeWasmError),
+	RecvError(RecvError),
+}
+
+impl Into<JsValue> for Error {
+	fn into(self) -> JsValue {
+		JsValue::from_str(self.to_string().as_str())
+	}
 }
 
 impl From<NoiseError> for Error {
@@ -118,6 +126,18 @@ impl From<SyncError> for Error {
 	}
 }
 
+impl From<SerdeWasmError> for Error {
+	fn from(e: SerdeWasmError) -> Self {
+		Self::SerdeWasmError(e)
+	}
+}
+
+impl From<RecvError> for Error {
+	fn from(e: RecvError) -> Self {
+		Self::RecvError(e)
+	}
+}
+
 impl StdError for Error {
 	fn source(&self) -> Option<&(dyn StdError + 'static)> {
 		match self {
@@ -127,6 +147,8 @@ impl StdError for Error {
 			Self::DialError(e) => Some(e),
 			Self::TransportError(e) => Some(e),
 			Self::SyncError(e) => Some(e),
+			Self::SerdeWasmError(e) => Some(e),
+			Self::RecvError(e) => Some(e),
 		}
 	}
 }
@@ -417,6 +439,12 @@ impl Client {
 											self.sync_context.download_msg(&prev, swarm.behaviour_mut().kad_mut())?;
 										}
 									}
+								},
+								SyncEvent::MessageLoadCompleted{ msg, req_id } => {
+									nonfatal!(resp_tx.send(CmdResp::MsgLoaded { msg, req_id }).await, req_id, resp_tx);
+								},
+								SyncEvent::MessageLoadFailed { req_id } => {
+									nonfatal!(resp_tx.send(CmdResp::Error { error: "Failed to load the message.".into(), req_id}).await, req_id, resp_tx);
 								}
 							},
 							Err(e) => error!("synchronization failed: {}", e),
@@ -473,19 +501,31 @@ impl Client {
 				}},
 				cmd = cmd_rx.select_next_some() => match cmd {
 					Cmd::Terminate => break Ok(()),
-					Cmd::SubmitMsg(SubmitMsgReq{ data, prev, captcha_ans,captcha_src, height, timestamp}) => {
-						let msg = nonfatal!(Message::try_from(MessageData::new(data, prev, Some(captcha_ans), Some(captcha_src), height, timestamp)), "Failed to construct message: {}");
+					Cmd::SubmitMsg{ req: SubmitMsgReq{ data, prev, captcha_ans,captcha_src, height, timestamp}, req_id } => {
+						let msg = nonfatal!(Message::try_from(MessageData::new(data, prev, Some(captcha_ans), Some(captcha_src), height, timestamp)), req_id, resp_tx);
 						let hash = msg.hash().clone();
 						match self.msg_context.submit_message(msg, swarm.behaviour_mut().floodsub_mut()) {
 							Ok(_) => {
-								nonfatal!(resp_tx.send(CmdResp::MsgSubmitted(hash)).await, "Failed to send to RPC channel: {}");
+								nonfatal!(resp_tx.send(CmdResp::MsgSubmitted{ hash, req_id }).await, req_id, resp_tx);
 							},
 							Err(e) => error!("Failed to submit message {}: {}", hex::encode(hash), e),
 						}
 					},
+					Cmd::LoadMsg { req: LoadMsgReq { hash }, req_id } => {
+						// If the message exists locally, just use that
+						if let Some(msg) = self.runtime.get_message(&hash) {
+							nonfatal!(resp_tx.send(CmdResp::MsgLoaded { msg: msg.clone(), req_id }).await, req_id, resp_tx);
+							continue;
+						}
+
+						// Otherwise, download it
+						nonfatal!(self.sync_context.load_msg(&hash, swarm.behaviour_mut().kad_mut(), req_id), req_id, resp_tx);
+					},
 				},
 				_ = sync_fut.next() => {
-					nonfatal!(self.sync_context.upload_chain(&self.runtime, swarm.behaviour_mut().kad_mut()), "Failed to upload chain: {}");
+					if let Err(e) = self.sync_context.upload_chain(&self.runtime, swarm.behaviour_mut().kad_mut()) {
+						error!("Failed to upload chain: {}", e);
+					}
 				}
 			}
 		}
