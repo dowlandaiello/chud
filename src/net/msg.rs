@@ -72,13 +72,13 @@ impl Context {
 						let hash = msg.hash().clone();
 
 						if self.follows_consensus_rules(rt, &msg) {
-							rt.insert_message(msg);
-
 							info!(
 								"Added message {} to the blockchain at height {}",
 								hex::encode(msg.hash()),
 								msg.data().height()
 							);
+
+							rt.insert_message(msg);
 						} else {
 							error!("Rejecting message {}", hex::encode(msg.hash()));
 						}
@@ -107,11 +107,13 @@ impl Context {
 	/// - The hash of the message is valid
 	/// - The timestamp of the message is valid
 	/// - The message is at the front of the current longest_chain
+	/// - The captcha answer in the message is valid
 	fn follows_consensus_rules(&self, rt: &Rt, msg: &Message) -> bool {
 		rt.longest_chain()
 			// Ensure prev is head
 			.zip(msg.data().prev())
 			.map(|(longest_chain, prev)| prev == longest_chain)
+			.or(Some(rt.head().is_none()))
 			// Ensure the message was made before now
 			.and_then(|cond| {
 				SystemTime::now()
@@ -124,6 +126,18 @@ impl Context {
 				let longest_message = rt.get_message(rt.longest_chain()?)?;
 
 				Some(cond && longest_message.data().timestamp() < msg.data().timestamp())
+			})
+			// Ensure the hash is valid
+			.and_then(|cond| Some(cond && msg.hash() == &msg.data().hashed().ok()?))
+			// Ensure the captcha answer is valid
+			.and_then(|cond| {
+				let captcha_src = rt.get_message(msg.data().captcha_src())?;
+
+				Some(
+					cond && (&(<blake3::Hash as Into<Hash>>::into(blake3::hash(
+						msg.data().captcha_ans().as_bytes(),
+					))) == captcha_src.data().new_captcha().answer()),
+				)
 			})
 			.unwrap_or_default()
 	}

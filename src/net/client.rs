@@ -473,8 +473,8 @@ impl Client {
 				}},
 				cmd = cmd_rx.select_next_some() => match cmd {
 					Cmd::Terminate => break Ok(()),
-					Cmd::SubmitMsg(SubmitMsgReq{ data, prev, captcha_ans, height, timestamp}) => {
-						let msg = nonfatal!(Message::try_from(MessageData::new(data, prev, captcha_ans, height, timestamp)), "Failed to construct message: {}");
+					Cmd::SubmitMsg(SubmitMsgReq{ data, prev, captcha_ans,captcha_src, height, timestamp}) => {
+						let msg = nonfatal!(Message::try_from(MessageData::new(data, prev, captcha_ans, captcha_src, height, timestamp)), "Failed to construct message: {}");
 						nonfatal!(self.msg_context.submit_message(msg, swarm.behaviour_mut().floodsub_mut()), "Failed to submit message: {}");
 					},
 				},

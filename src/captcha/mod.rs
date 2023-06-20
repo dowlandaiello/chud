@@ -28,6 +28,18 @@ impl Default for Captcha {
 	}
 }
 
+impl Captcha {
+	/// Gets a slice of the image data underlying the captcha.
+	pub fn data(&self) -> &[u8] {
+		self.data.as_slice()
+	}
+
+	/// Gets a reference to the hash of the answer to the captcha.
+	pub fn answer(&self) -> &Hash {
+		&self.answer
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

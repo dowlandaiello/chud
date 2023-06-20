@@ -10,6 +10,7 @@ pub struct MessageData {
 	prev: Option<Hash>,
 	new_captcha: Captcha,
 	captcha_ans: String,
+	captcha_src: Hash,
 	height: usize,
 	timestamp: u128,
 }
@@ -22,6 +23,7 @@ impl MessageData {
 		data: Vec<u8>,
 		prev: Option<Hash>,
 		captcha_ans: String,
+		captcha_src: Hash,
 		height: usize,
 		timestamp: u128,
 	) -> Self {
@@ -30,6 +32,7 @@ impl MessageData {
 			prev,
 			new_captcha: Captcha::default(),
 			captcha_ans,
+			captcha_src,
 			height,
 			timestamp,
 		}
@@ -55,6 +58,11 @@ impl MessageData {
 		self.captcha_ans.as_str()
 	}
 
+	/// Gets a reference to the hash of the message from which the captcha is derived that this message is answering.
+	pub fn captcha_src(&self) -> &Hash {
+		&self.captcha_src
+	}
+
 	/// Gets the index of the message in the chain. Should be prev.height + 1.
 	pub fn height(&self) -> usize {
 		self.height
@@ -63,6 +71,12 @@ impl MessageData {
 	/// Gets the UNIX timestamp of the message.
 	pub fn timestamp(&self) -> u128 {
 		self.timestamp
+	}
+
+	/// Calculates the hash of the transaction data.
+	pub fn hashed(&self) -> Result<Hash, Error> {
+		let encoded = serde_json::to_vec(&self)?;
+		Ok(blake3::hash(encoded.as_slice()).into())
 	}
 }
 
@@ -78,13 +92,8 @@ impl TryFrom<MessageData> for Message {
 	type Error = Error;
 
 	fn try_from(data: MessageData) -> Result<Self, Self::Error> {
-		let encoded = serde_json::to_vec(&data)?;
-		let hashed = blake3::hash(encoded.as_slice());
-
-		Ok(Self {
-			data,
-			hash: hashed.into(),
-		})
+		let hash = data.hashed()?;
+		Ok(Self { data, hash })
 	}
 }
 
