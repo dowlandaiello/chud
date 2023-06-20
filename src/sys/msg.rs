@@ -11,19 +11,27 @@ pub struct MessageData {
 	new_captcha: Captcha,
 	captcha_ans: String,
 	height: usize,
+	timestamp: u128,
 }
 
 impl MessageData {
 	/// Constructs a new message in the context of a greater blockchain. Expects a height and answer to the
 	/// derived corresponding captcha, as well as a previous message, and arbitrary data. Generates a new
 	/// captcha to attach to the message.
-	pub fn new(data: Vec<u8>, prev: Option<Hash>, captcha_ans: String, height: usize) -> Self {
+	pub fn new(
+		data: Vec<u8>,
+		prev: Option<Hash>,
+		captcha_ans: String,
+		height: usize,
+		timestamp: u128,
+	) -> Self {
 		Self {
 			data,
 			prev,
 			new_captcha: Captcha::default(),
 			captcha_ans,
 			height,
+			timestamp,
 		}
 	}
 
@@ -50,6 +58,11 @@ impl MessageData {
 	/// Gets the index of the message in the chain. Should be prev.height + 1.
 	pub fn height(&self) -> usize {
 		self.height
+	}
+
+	/// Gets the UNIX timestamp of the message.
+	pub fn timestamp(&self) -> u128 {
+		self.timestamp
 	}
 }
 
@@ -93,15 +106,16 @@ mod tests {
 
 	#[test]
 	fn test_new() {
-		let data = MessageData::new(Vec::new(), None, String::from(""), 0);
+		let data = MessageData::new(Vec::new(), None, String::from(""), 0, 0);
 		assert_eq!(data.data, <Vec<u8>>::new());
 		assert_eq!(data.prev, None);
 		assert_eq!(data.captcha_ans, String::from(""));
+		assert_eq!(data.timestamp, 0);
 	}
 
 	#[test]
 	fn test_try_from() -> Result<(), Error> {
-		let data = MessageData::new(Vec::new(), None, String::from(""), 0);
+		let data = MessageData::new(Vec::new(), None, String::from(""), 0, 0);
 		let _ = Message::try_from(data)?;
 
 		Ok(())

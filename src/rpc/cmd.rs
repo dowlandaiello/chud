@@ -16,6 +16,7 @@ pub struct SubmitMsgReq {
 	pub(crate) prev: Option<Hash>,
 	pub(crate) captcha_ans: String,
 	pub(crate) height: usize,
+	pub(crate) timestamp: usize,
 }
 
 /// RPC outputs to the CHUD CLI.

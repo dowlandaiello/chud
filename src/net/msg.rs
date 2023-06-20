@@ -11,6 +11,7 @@ use serde_json::Error as SerdeError;
 use std::{
 	error::Error as StdError,
 	fmt::{Display, Error as FmtError, Formatter},
+	time::{SystemTime, UNIX_EPOCH},
 };
 
 /// Events emitted by the message behavior
@@ -65,14 +66,22 @@ impl Context {
 			// Possible floodsub message topics:
 			// - new_msg
 			Some(BehaviorEvent::Floodsub(FloodsubEvent::Message(fs_msg))) => {
-				// TODO: consensus
-				// - Ensure hash is valid
-				// - Ensure timestamp is valid
 				// A new message has been received
 				if fs_msg.topics.contains(&Topic::new(FLOODSUB_MESSAGE_TOPIC)) {
 					if let Ok(msg) = serde_json::from_slice::<Message>(&fs_msg.data) {
 						let hash = msg.hash().clone();
-						rt.insert_message(msg);
+
+						if self.follows_consensus_rules(rt, &msg) {
+							rt.insert_message(msg);
+
+							info!(
+								"Added message {} to the blockchain at height {}",
+								hex::encode(msg.hash()),
+								msg.data().height()
+							);
+						} else {
+							error!("Rejecting message {}", hex::encode(msg.hash()));
+						}
 
 						return (Ok(Some(Event::MessageReceived(hash))), None);
 					} else {
@@ -92,5 +101,30 @@ impl Context {
 		floodsub.publish(Topic::new(FLOODSUB_MESSAGE_TOPIC), serialized);
 
 		Ok(())
+	}
+
+	/// Determines whether:
+	/// - The hash of the message is valid
+	/// - The timestamp of the message is valid
+	/// - The message is at the front of the current longest_chain
+	fn follows_consensus_rules(&self, rt: &Rt, msg: &Message) -> bool {
+		rt.longest_chain()
+			// Ensure prev is head
+			.zip(msg.data().prev())
+			.map(|(longest_chain, prev)| prev == longest_chain)
+			// Ensure the message was made before now
+			.and_then(|cond| {
+				SystemTime::now()
+					.duration_since(UNIX_EPOCH)
+					.map(|current_time| cond && msg.data().timestamp() < current_time.as_millis())
+					.ok()
+			})
+			// Ensure the message was made after the head
+			.and_then(|cond| {
+				let longest_message = rt.get_message(rt.longest_chain()?)?;
+
+				Some(cond && longest_message.data().timestamp() < msg.data().timestamp())
+			})
+			.unwrap_or_default()
 	}
 }
