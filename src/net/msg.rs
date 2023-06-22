@@ -95,9 +95,16 @@ impl Context {
 	}
 
 	/// Publishes a message to the floodsub messages topic.
-	pub fn submit_message(&mut self, msg: Message, floodsub: &mut Floodsub) -> Result<(), Error> {
+	pub fn submit_message(
+		&mut self,
+		rt: &mut Rt,
+		msg: Message,
+		floodsub: &mut Floodsub,
+	) -> Result<(), Error> {
 		let serialized = serde_json::to_vec(&msg)?;
 		floodsub.publish(Topic::new(FLOODSUB_MESSAGE_TOPIC), serialized);
+
+		rt.insert_message(msg);
 
 		Ok(())
 	}

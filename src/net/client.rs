@@ -502,9 +502,9 @@ impl Client {
 				cmd = cmd_rx.select_next_some() => match cmd {
 					Cmd::Terminate => break Ok(()),
 					Cmd::SubmitMsg{ req: SubmitMsgReq{ data, prev, captcha_ans,captcha_src, height, timestamp}, req_id } => {
-						let msg = nonfatal!(Message::try_from(MessageData::new(data, prev, Some(captcha_ans), Some(captcha_src), height, timestamp)), req_id, resp_tx);
+						let msg = nonfatal!(Message::try_from(MessageData::new(data, prev, captcha_ans, captcha_src, height, timestamp)), req_id, resp_tx);
 						let hash = msg.hash().clone();
-						match self.msg_context.submit_message(msg, swarm.behaviour_mut().floodsub_mut()) {
+						match self.msg_context.submit_message(&mut self.runtime, msg, swarm.behaviour_mut().floodsub_mut()) {
 							Ok(_) => {
 								nonfatal!(resp_tx.send(CmdResp::MsgSubmitted{ hash, req_id }).await, req_id, resp_tx);
 							},
@@ -521,6 +521,14 @@ impl Client {
 						// Otherwise, download it
 						nonfatal!(self.sync_context.load_msg(&hash, swarm.behaviour_mut().kad_mut(), req_id), req_id, resp_tx);
 					},
+					Cmd::GetHead { req_id } => {
+						if let Some(head) = self.runtime.longest_chain() {
+							nonfatal!(resp_tx.send(CmdResp::HeadLoaded { hash: head.clone(), req_id }).await, req_id, resp_tx);
+							continue;
+						}
+
+						nonfatal!(resp_tx.send(CmdResp::Error{ error: String::from("Missing chain HEAD."), req_id}).await, req_id, resp_tx);
+					}
 				},
 				_ = sync_fut.next() => {
 					if let Err(e) = self.sync_context.upload_chain(&self.runtime, swarm.behaviour_mut().kad_mut()) {
@@ -536,6 +544,9 @@ impl Client {
 mod tests {
 	use super::super::super::sys::msg::{Message, MessageData};
 	use super::*;
+
+	#[cfg(not(target_arch = "wasm32"))]
+	use tokio::task::JoinError;
 
 	#[test]
 	fn test_new() {
@@ -576,5 +587,104 @@ mod tests {
 			.await?;
 
 		Ok(())
+	}
+
+	#[cfg(not(target_arch = "wasm32"))]
+	#[tokio::test]
+	async fn test_submit_message() -> Result<(), Box<dyn StdError>> {
+		let (tx, rx) = async_channel::unbounded();
+		let (tx_resp, rx_resp) = async_channel::unbounded();
+
+		let client = Client::new(0);
+		let join = tokio::spawn(async {
+			client
+				.start(rx, tx_resp, Vec::new(), Some(6224), Vec::new())
+				.await
+				.map_err(|e| e.to_string())
+		});
+
+		tx.send(Cmd::SubmitMsg {
+			req: SubmitMsgReq {
+				data: Vec::new(),
+				prev: None,
+				captcha_ans: None,
+				captcha_src: None,
+				height: 0,
+				timestamp: 0,
+			},
+			req_id: 0,
+		})
+		.await?;
+		let resp = rx_resp.recv().await?;
+		tx.send(Cmd::Terminate).await?;
+
+		assert!(matches!(resp, CmdResp::MsgSubmitted { .. }));
+
+		join.await
+			.map_err(|e| <JoinError as Into<Box<dyn StdError>>>::into(e))?
+			.map_err(|e| e.into())
+	}
+
+	#[cfg(not(target_arch = "wasm32"))]
+	#[tokio::test]
+	async fn test_load_message() -> Result<(), Box<dyn StdError>> {
+		let (tx, rx) = async_channel::unbounded();
+		let (tx_resp, rx_resp) = async_channel::unbounded();
+
+		let client = Client::new(0);
+		let join = tokio::spawn(async {
+			client
+				.start(rx, tx_resp, Vec::new(), Some(6224), Vec::new())
+				.await
+				.map_err(|e| e.to_string())
+		});
+
+		tx.send(Cmd::SubmitMsg {
+			req: SubmitMsgReq {
+				data: Vec::new(),
+				prev: None,
+				captcha_ans: None,
+				captcha_src: None,
+				height: 0,
+				timestamp: 0,
+			},
+			req_id: 0,
+		})
+		.await?;
+		let resp = rx_resp.recv().await?;
+
+		assert!(matches!(resp, CmdResp::MsgSubmitted { .. }));
+
+		let hash = match resp {
+			CmdResp::MsgSubmitted { hash, .. } => hash,
+			_ => {
+				panic!("Invalid response. Expected hash.");
+			}
+		};
+
+		// Ensure that the found message has the same data that we put in
+		tx.send(Cmd::LoadMsg {
+			req: LoadMsgReq { hash: hash.clone() },
+			req_id: 1,
+		})
+		.await?;
+		let resp = rx_resp.recv().await?;
+
+		assert!(matches!(resp, CmdResp::MsgLoaded { .. }));
+
+		match resp {
+			CmdResp::MsgLoaded { msg, .. } => {
+				assert_eq!(msg.hash(), &hash);
+			}
+			_ => {
+				panic!("Invalid response. Expected message.");
+			}
+		}
+
+		tx.send(Cmd::Terminate).await?;
+
+		join.await
+			.map_err(|e| <JoinError as Into<Box<dyn StdError>>>::into(e))?
+			.map_err(|e| e.into())
 	}
 }

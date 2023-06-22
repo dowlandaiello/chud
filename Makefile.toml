@@ -1,5 +1,5 @@
 [tasks.test-all]
 script = '''
-cargo test
+cargo test -- --test-threads 1
 wasm-pack test --headless --chrome --firefox
 '''

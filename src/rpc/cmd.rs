@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub enum Cmd {
 	SubmitMsg { req: SubmitMsgReq, req_id: usize },
 	LoadMsg { req: LoadMsgReq, req_id: usize },
+	GetHead { req_id: usize },
 	Terminate,
 }
 
@@ -15,8 +16,8 @@ pub enum Cmd {
 pub struct SubmitMsgReq {
 	pub(crate) data: Vec<u8>,
 	pub(crate) prev: Option<Hash>,
-	pub(crate) captcha_ans: String,
-	pub(crate) captcha_src: Hash,
+	pub(crate) captcha_ans: Option<String>,
+	pub(crate) captcha_src: Option<Hash>,
 	pub(crate) height: usize,
 	pub(crate) timestamp: u128,
 }
@@ -28,8 +29,10 @@ pub struct LoadMsgReq {
 }
 
 /// RPC outputs to the CHUD CLI.
+#[derive(Debug, PartialEq)]
 pub enum CmdResp {
 	MsgSubmitted { hash: Hash, req_id: usize },
 	MsgLoaded { msg: Message, req_id: usize },
+	HeadLoaded { hash: Hash, req_id: usize },
 	Error { error: String, req_id: usize },
 }

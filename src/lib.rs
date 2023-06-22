@@ -138,3 +138,39 @@ pub async fn load_message(hash_str: &str) -> Result<JsValue, String> {
 		}
 	}
 }
+
+/// Gets a hex encoding of the hash of the HEAD message for the chain.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub async fn get_head() -> Result<String, String> {
+	let req_id = instant::now() as usize;
+	CMD_RX_TX
+		.0
+		.send(Cmd::GetHead {
+			req_id: req_id as usize,
+		})
+		.await
+		.map_err(|e| e.to_string())?;
+
+	loop {
+		match RESP_RX_TX.1.recv().await.map_err(|e| e.to_string())? {
+			CmdResp::HeadLoaded {
+				hash,
+				req_id: resp_id,
+			} => {
+				if resp_id == req_id as usize {
+					return Ok(hex::encode(hash));
+				}
+			}
+			CmdResp::Error {
+				error,
+				req_id: resp_id,
+			} => {
+				if resp_id == req_id as usize {
+					return Err(format!("Error occurred while loading message: {}", error));
+				}
+			}
+			_ => continue,
+		}
+	}
+}
