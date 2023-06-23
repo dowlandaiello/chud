@@ -34,5 +34,6 @@ pub enum CmdResp {
 	MsgSubmitted { hash: Hash, req_id: usize },
 	MsgLoaded { msg: Message, req_id: usize },
 	HeadLoaded { hash: Hash, req_id: usize },
+	MsgReceived { msg: Message },
 	Error { error: String, req_id: usize },
 }

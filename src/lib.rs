@@ -14,6 +14,8 @@ use async_channel::{Receiver, Sender};
 #[cfg(target_arch = "wasm32")]
 use crypto::hash::Hash;
 #[cfg(target_arch = "wasm32")]
+use js_sys::Function;
+#[cfg(target_arch = "wasm32")]
 use net::client::Error;
 #[cfg(target_arch = "wasm32")]
 use rpc::cmd::{Cmd, CmdResp, LoadMsgReq, SubmitMsgReq};
@@ -173,4 +175,32 @@ pub async fn get_head() -> Result<String, String> {
 			_ => continue,
 		}
 	}
+}
+
+/// Registers a callback to be executed every time a new message is received.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub async fn on_message(callback: Function) {
+	wasm_bindgen_futures::spawn_local(async move {
+		loop {
+			match RESP_RX_TX.1.recv().await.map_err(|e| e.to_string()) {
+				Ok(CmdResp::MsgReceived { msg }) => {
+					let json = match serde_wasm_bindgen::to_value(&msg).map_err(|e| e.to_string()) {
+						Ok(v) => v,
+						Err(e) => {
+							error!("Error occurred while serializing message: {}", e);
+							continue;
+						}
+					};
+
+					let this = JsValue::null();
+					callback.call1(&this, &json);
+				}
+				Err(e) => {
+					error!("Error occurred while listening to messages: {}", e);
+				}
+				_ => {}
+			}
+		}
+	});
 }

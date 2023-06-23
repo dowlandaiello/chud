@@ -20,6 +20,6 @@ Submits the JSON-encoded message, ~message~ to the blockchain. Returns the hash 
 
 Loads the message with the given Hash from the blockchain. Returns a JSON encoding of the message.
 
-*** ~listen_messages() -> AsyncIterable<Message>~
+*** ~on_message(callback: Function)~
 
-Asynchronously listens for incoming messages, receiving them in an AsyncIterable.
+Asynchronously listens for incoming messages, receiving them in a provided callback.
