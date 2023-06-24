@@ -114,6 +114,7 @@ impl Context {
 	/// - The timestamp of the message is valid
 	/// - The message is at the front of the current longest_chain
 	/// - The captcha answer in the message is valid
+	/// - The captcha src is derived properly from the hash
 	fn follows_consensus_rules(&self, rt: &Rt, msg: &Message) -> bool {
 		// Ensure the message was made before now
 		if instant::now() < msg.data().timestamp() as f64 {
