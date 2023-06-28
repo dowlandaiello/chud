@@ -6,4 +6,4 @@ COPY ./Cargo.toml ./Cargo.toml
 
 RUN cargo install --path .
 
-ENTRYPOINT ["chud"]
+ENTRYPOINT ["chudd"]
