@@ -176,6 +176,8 @@ impl Context {
 						// A peer asked for the hash of the longest chain. Find it, and if it
 						// exists, respond
 						Request::LongestChain { query_round } => {
+							debug!("longest chain requested");
+
 							if let Some(longest_chain) =
 								rt.longest_chain().and_then(|hash| rt.get_message(hash))
 							{
@@ -272,15 +274,18 @@ impl Context {
 			let msg = rt.get_message(&curr).ok_or(Error::MissingMessage)?;
 			let msg_bytes = serde_json::to_vec(&msg).map_err(|e| Error::SerializationError(e))?;
 
+			println!("{}", msg_bytes.len());
+
 			// Write the transaction under its hash with its JSON serialization to the DHT
-			debug!(
-				"writing message {} to KAD DHT",
-				hex::encode(msg.hash().as_ref())
-			);
 			let q_id = kad.put_record(
 				Record::new(RecordKey::new(&msg.hash().as_ref()), msg_bytes),
 				DHT_QUORUM,
 			)?;
+			debug!(
+				"writing message {} to KAD DHT in query {:?}",
+				hex::encode(msg.hash().as_ref()),
+				q_id
+			);
 			this.chain_uploads.insert(q_id, msg.hash().clone());
 
 			if let Some(prev) = msg.data().prev() {
@@ -299,11 +304,13 @@ impl Context {
 		request_response: &mut RRBehavior<Request, Response>,
 		sampling_pool: Vec<&PeerId>,
 	) -> Result<(), Error> {
+		info!("polling {} peers for head", sampling_pool.len());
+
 		// Contact x% of peers
 		let n_peers = sampling_pool.len();
 		let to_contact = sampling_pool
 			.into_iter()
-			.take((n_peers as f32 * SAMPLING_SIZE) as usize);
+			.take((n_peers as f32 * SAMPLING_SIZE).ceil() as usize);
 
 		// Take note of which round of questioning this is
 		let entry = SynchronizationRequest {
@@ -319,6 +326,8 @@ impl Context {
 
 		// Request the longest chain from each peer
 		for peer in to_contact {
+			debug!("polling peer {} for head", peer);
+
 			request_response.send_request(
 				peer,
 				Request::LongestChain {

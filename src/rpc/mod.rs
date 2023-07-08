@@ -1,3 +1,4 @@
+#[cfg(not(target_arch = "wasm32"))]
 use actix_web::{
 	get, post,
 	web::{Data, Json},
@@ -10,6 +11,7 @@ use std::error::Error;
 pub mod cmd;
 
 /// Stops the running client.
+#[cfg(not(target_arch = "wasm32"))]
 #[post("/terminate")]
 pub async fn terminate(
 	cmd_tx: Data<Sender<Cmd>>,
@@ -20,7 +22,15 @@ pub async fn terminate(
 	Ok::<HttpResponseBuilder, Box<dyn Error>>(HttpResponse::Ok())
 }
 
+/// Checks that the RPC connection is valid.
+#[cfg(not(target_arch = "wasm32"))]
+#[get("/health_check")]
+pub async fn health_check() -> impl Responder {
+	HttpResponse::Ok()
+}
+
 /// Submits a message to the network.
+#[cfg(not(target_arch = "wasm32"))]
 #[post("/submit_msg")]
 pub async fn submit_msg(
 	cmd_tx: Data<Sender<Cmd>>,
@@ -57,6 +67,7 @@ pub async fn submit_msg(
 }
 
 /// Reads a message from the network.
+#[cfg(not(target_arch = "wasm32"))]
 #[get("/load_msg")]
 pub async fn load_msg(
 	cmd_tx: Data<Sender<Cmd>>,
@@ -93,6 +104,7 @@ pub async fn load_msg(
 }
 
 /// Gets the hash of the head.
+#[cfg(not(target_arch = "wasm32"))]
 #[get("/get_head")]
 pub async fn get_head(
 	cmd_tx: Data<Sender<Cmd>>,

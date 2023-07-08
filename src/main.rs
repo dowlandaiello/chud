@@ -3,7 +3,7 @@ use chud::net::client::Client;
 #[cfg(not(target_arch = "wasm32"))]
 use actix_web::{web::Data, App, HttpServer};
 #[cfg(not(target_arch = "wasm32"))]
-use chud::rpc::{get_head, load_msg, submit_msg, terminate};
+use chud::rpc::{get_head, health_check, load_msg, submit_msg, terminate};
 #[cfg(not(target_arch = "wasm32"))]
 use clap::{arg, command, Parser};
 #[cfg(not(target_arch = "wasm32"))]
@@ -57,6 +57,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 			.service(submit_msg)
 			.service(load_msg)
 			.service(terminate)
+			.service(health_check)
 	})
 	.bind(("0.0.0.0", args.rpc_port))?
 	.run();

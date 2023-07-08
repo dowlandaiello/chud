@@ -26,7 +26,7 @@ use libp2p::{
 	futures::{Stream, StreamExt},
 	identify::{Behaviour, Config},
 	identity,
-	kad::{record::store::MemoryStore, Kademlia, NoKnownPeers},
+	kad::{record::store::MemoryStore, Kademlia, KademliaConfig, NoKnownPeers},
 	multiaddr::{Error as MultiaddrError, Protocol},
 	noise::{Config as NoiseConfig, Error as NoiseError},
 	ping::Behaviour as PingBehavior,
@@ -302,7 +302,9 @@ impl Client {
 		// Create a swarm with the desired behavior
 		{
 			let store = MemoryStore::new(local_peer_id);
-			let kad = Kademlia::new(local_peer_id, store);
+			let mut kad_conf = KademliaConfig::default();
+			kad_conf.set_max_packet_size(30 * 1024);
+			let kad = Kademlia::with_config(local_peer_id, store, kad_conf);
 			let floodsub = Floodsub::new(local_peer_id);
 			let identify = Behaviour::new(Config::new(
 				format!("{}{}", NET_PROTOCOL_PREFIX, self.chain_id),
@@ -346,7 +348,9 @@ impl Client {
 		// Create a swarm with the desired behavior
 		{
 			let store = MemoryStore::new(local_peer_id);
-			let kad = Kademlia::new(local_peer_id, store);
+			let mut kad_conf = KademliaConfig::default();
+			kad_conf.set_max_packet_size(30 * 1024);
+			let kad = Kademlia::with_config(local_peer_id, store, kad_conf);
 			let floodsub = Floodsub::new(local_peer_id);
 			let identify = Behaviour::new(Config::new(
 				format!("{}{}", NET_PROTOCOL_PREFIX, self.chain_id),
@@ -430,9 +434,13 @@ impl Client {
 									info!("message {} successfully committed to the DHT", hex::encode(h));
 								},
 								SyncEvent::LongestChainUpdated { hash, .. } => {
+									info!("got new longest chain {}", hex::encode(&hash));
+
 									self.sync_context.download_msg(&hash, swarm.behaviour_mut().kad_mut())?;
 								},
 								SyncEvent::MessageLoaded(msg) => {
+									info!("message {} loaded", hex::encode(msg.hash()));
+
 									// Download the message if it doesn't exist locally
 									if let Some(prev) = msg.data().prev() {
 										if self.runtime.get_message(prev).is_none() {
@@ -444,6 +452,8 @@ impl Client {
 									nonfatal!(resp_tx.send(CmdResp::MsgLoaded { msg, req_id }).await, req_id, resp_tx);
 								},
 								SyncEvent::MessageLoadFailed { req_id } => {
+									error!("failed to load message");
+
 									nonfatal!(resp_tx.send(CmdResp::Error { error: "Failed to load the message.".into(), req_id}).await, req_id, resp_tx);
 								}
 							},
@@ -474,7 +484,22 @@ impl Client {
 
 								// Bootstrap the DHT if we connected to one of the bootstrap addresses
 								if !self.bootstrapped && bootstrap_peers.contains(&address.to_string()) {
+									let sampling_pool = swarm.connected_peers().map(|x| x.clone()).collect::<Vec<PeerId>>();
+
 									swarm.behaviour_mut().kad_mut().bootstrap().map_err(<NoKnownPeers as Into<Error>>::into)?;
+									if let Err(e) = self
+										.sync_context
+										.download_head(swarm.behaviour_mut().request_response_mut(), sampling_pool.iter().collect::<Vec<&PeerId>>())
+									{
+										error!("Failed to download chain: {}", e);
+									};
+
+									if let Err(e) = self
+										.sync_context
+										.upload_chain(&self.runtime, swarm.behaviour_mut().kad_mut())
+									{
+										error!("Failed to upload chain: {}", e);
+									};
 
 									self.bootstrapped = true;
 
