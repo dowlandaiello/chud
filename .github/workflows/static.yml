@@ -38,7 +38,7 @@ jobs:
       - name: Get Trunk
         run: cargo install trunk
       - name: Compile Demo
-        run: cd examples/chud_ui && trunk build && mv dist/* ../../
+        run: cd examples/chud-ui && trunk build && mv dist/* ../../
       - name: Setup Pages
         uses: actions/configure-pages@v3
       - name: Upload artifact
