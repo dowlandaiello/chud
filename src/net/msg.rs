@@ -13,6 +13,8 @@ use std::{
 	fmt::{Display, Error as FmtError, Formatter},
 };
 
+pub type ConsensusRule = Box<dyn Fn(&Rt, &Message) -> bool>;
+
 /// Events emitted by the message behavior
 #[derive(Debug)]
 pub enum Event {
@@ -52,9 +54,15 @@ impl From<SerdeError> for Error {
 
 /// A context that handles swarm events dealing with messages.
 #[derive(Default)]
-pub struct Context;
+pub struct Context {
+	pub(crate) consensus_rules: Vec<ConsensusRule>,
+}
 
 impl Context {
+	pub fn new(consensus_rules: Vec<Box<dyn Fn(&Rt, &Message) -> bool>>) -> Self {
+		Self { consensus_rules }
+	}
+
 	pub fn poll(
 		&mut self,
 		rt: &mut Rt,
@@ -147,6 +155,12 @@ impl Context {
 			{
 				return false;
 			};
+		}
+
+		for rule in self.consensus_rules.iter() {
+			if !rule(rt, msg) {
+				return false;
+			}
 		}
 
 		// Ensure the hash is valid

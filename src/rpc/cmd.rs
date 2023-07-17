@@ -2,7 +2,7 @@ use super::super::{crypto::hash::Hash, sys::msg::Message};
 use serde::{Deserialize, Serialize};
 
 /// RPC inputs to the CHUD CLI.
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum Cmd {
 	SubmitMsg { req: SubmitMsgReq, req_id: usize },
 	LoadMsg { req: LoadMsgReq, req_id: usize },
@@ -29,7 +29,7 @@ pub struct LoadMsgReq {
 }
 
 /// RPC outputs to the CHUD CLI.
-#[derive(Debug, PartialEq)]
+#[derive(Serialize, Clone, Hash, Eq, Debug, PartialEq)]
 pub enum CmdResp {
 	MsgSubmitted { hash: Hash, req_id: usize },
 	MsgLoaded { msg: Message, req_id: usize },

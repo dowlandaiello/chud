@@ -3,7 +3,7 @@ use captcha_rs::CaptchaBuilder;
 use serde::{Deserialize, Serialize};
 
 /// A captcha to be solved. Constituted by base64-encoded image data, and a hashed answer.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Hash, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub struct Captcha {
 	data: Vec<u8>,
 	answer: Hash,

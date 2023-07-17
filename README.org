@@ -6,20 +6,97 @@
 
 ** About
 
-CHUD, the checkpoint of humanity underlying datastore, is a WebAssembly module implementing an abstract blockchain of linked messages of arbitrary content.
+CHUD, the checkpoint of humanity underlying datastore, is a browser and server-based Blockchain based on captchas and messages with arbitrary data types. It is primarily meant to be used as a framework for more advanced blockchain applications.
 
-** Interface
+** Usage
 
-CHUD is primarily queried, and written to using the described API made available by the exports of the respective WebAssembly module:
+CHUD is primarily meant to be used through its network ~Client~, which receives commands and emits events.
 
-*** ~submit_message(message: Message) -> Hash~
+*** Commands
 
-Submits the JSON-encoded message, ~message~ to the blockchain. Returns the hash of the submitted message.
+Commands to the client are sent through an ~async_channel::Sender<Cmd>~ where ~Cmd~ has the below definition:
 
-*** ~load_message(hash: String) -> Message~
+#+BEGIN_SRC rust
+/// RPC inputs to the CHUD CLI.
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Cmd {
+	SubmitMsg { req: SubmitMsgReq, req_id: usize },
+	LoadMsg { req: LoadMsgReq, req_id: usize },
+	GetHead { req_id: usize },
+	Terminate,
+}
 
-Loads the message with the given Hash from the blockchain. Returns a JSON encoding of the message.
+/// A partially applied MessageData construction used by clients to submit
+/// messages to the blockchain.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SubmitMsgReq {
+	pub(crate) data: Vec<u8>,
+	pub(crate) prev: Option<Hash>,
+	pub(crate) captcha_ans: Option<String>,
+	pub(crate) captcha_src: Option<Hash>,
+	pub(crate) height: usize,
+	pub(crate) timestamp: u128,
+}
 
-*** ~on_message(callback: Function)~
+/// A request to load a message with a particular hash.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct LoadMsgReq {
+	pub(crate) hash: Hash,
+}
+#+END_SRC
 
-Asynchronously listens for incoming messages, receiving them in a provided callback.
+An example of querying the ~Client~ using a ~Cmd~ is as follows:
+
+#+BEGIN_SRC rust
+const BOOTSTRAP_NODES: [&'static str; 1] = ["/ip4/127.0.0.1/tcp/6224/ws"];
+
+let (tx, rx) = async_channel::unbounded();
+let (tx_resp, rx_resp) = async_channel::unbounded();
+
+// Start the client with some known bootstrap nodes
+let client = Client::load_from_disk(0)
+	.await
+	.expect("to be able to load the blockchain from the disk");
+
+let _ = client
+	.start(
+		rx,
+		tx_resp,
+		BOOTSTRAP_NODES
+			.to_vec()
+			.into_iter()
+			.map(|x| x.to_owned())
+			.collect::<Vec<String>>(),
+		None,
+		Vec::new(),
+	)
+	.await;
+
+tx.send(Cmd::GetHead { req_id: 0 }).await.expect("channel send to succeed");
+#+END_SRC
+
+*** Events
+
+The CHUD network client also emits response events via a ~async_channel::Receiver<CmdResp>~ where ~CmdResp~ is defined as such:
+
+#+BEGIN_SRC rust
+/// RPC outputs to the CHUD CLI.
+#[derive(Serialize, Clone, Hash, Eq, Debug, PartialEq)]
+pub enum CmdResp {
+	MsgSubmitted { hash: Hash, req_id: usize },
+	MsgLoaded { msg: Message, req_id: usize },
+	HeadLoaded { hash: Hash, req_id: usize },
+	MsgReceived { msg: Message },
+	Error { error: String, req_id: usize },
+}
+#+END_SRC
+
+An example of receiving emitted events from the client is as such:
+
+#+BEGIN_SRC rust
+tx.send(Cmd::GetHead { req_id: 0 }).await.expect("channel send to succeed");
+match rx_resp.recv().await.expect("to be an ok value") {
+        CmdResp::HeadLoaded { hash, ... } => log::info!("HEAD loaded: {}", hex::encode(hash)),
+        _ => {}
+}
+#+END_SRC

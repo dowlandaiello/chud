@@ -8,7 +8,7 @@ use super::{
 		util::nonfatal,
 	},
 	behavior::{Behavior, BehaviorEvent},
-	msg::{Context as MsgContext, Event as MsgEvent},
+	msg::{ConsensusRule, Context as MsgContext, Event as MsgEvent},
 	sync::{Context as SyncContext, Error as SyncError, Event as SyncEvent},
 	DB_NAME, NET_PROTOCOL_PREFIX, RR_PROTOCOL_PREFIX, RUNTIME_STORE, STATE_KEY,
 	SYNCHRONIZATION_INTERVAL,
@@ -189,6 +189,12 @@ impl Client {
 			sync_context: SyncContext::default(),
 			msg_context: MsgContext::default(),
 		}
+	}
+
+	/// Adds a consensus rule to the message daemon.
+	pub fn with_consensus_rule(&mut self, rule: ConsensusRule) {
+		let rules = &mut self.msg_context.consensus_rules;
+		rules.push(rule);
 	}
 
 	/// Loads the saved blockchain data from indexeddb.
@@ -427,7 +433,7 @@ impl Client {
 					match event {
 					SwarmEvent::Behaviour(event) => {
 						// Check if the sync context has something to say about this
-						let (out_event, in_event) = self.sync_context.poll(&self.runtime, swarm.behaviour_mut().request_response_mut(), Some(event));
+						let (out_event, in_event) = self.sync_context.poll(&mut self.runtime, swarm.behaviour_mut().request_response_mut(), Some(event));
 						match out_event {
 							Ok(Some(e)) => match e {
 								SyncEvent::MessageCommitted(h) => {

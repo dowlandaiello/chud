@@ -4,7 +4,7 @@ use serde_json::Error;
 
 /// A message in the CHUD blockchain. Primarily constituted by arbitrary data,
 /// and newly generated and previous captcha answers.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Hash, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub struct MessageData {
 	data: Vec<u8>,
 	prev: Option<Hash>,
@@ -82,7 +82,7 @@ impl MessageData {
 
 /// A message in the CHUD blockchain. Primarily constituted by arbitrary data,
 /// and newly generated and previous captcha answers.
-#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Hash, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Message {
 	data: MessageData,
 	hash: Hash,

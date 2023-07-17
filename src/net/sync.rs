@@ -112,7 +112,7 @@ impl Context {
 	/// the appropriate event if an operation was completed.
 	pub fn poll(
 		&mut self,
-		rt: &Rt,
+		rt: &mut Rt,
 		request_response: &mut RRBehavior<Request, Response>,
 		in_event: Option<BehaviorEvent>,
 	) -> (Result<Option<Event>, Error>, Option<BehaviorEvent>) {
@@ -135,8 +135,11 @@ impl Context {
 						// We successfully found the message
 						if let QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(record))) = result
 						{
-							if let Ok(msg) = serde_json::from_slice(record.record.value.as_slice())
+							if let Ok(msg) =
+								serde_json::from_slice::<Message>(record.record.value.as_slice())
 							{
+								rt.insert_message(msg.clone());
+
 								// Notify the user that the message was found
 								return (Ok(Some(Event::MessageLoaded(msg))), None);
 							}
@@ -148,9 +151,11 @@ impl Context {
 						// We successfully found the message
 						match result {
 							QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(record))) => {
-								if let Ok(msg) =
-									serde_json::from_slice(record.record.value.as_slice())
-								{
+								if let Ok(msg) = serde_json::from_slice::<Message>(
+									record.record.value.as_slice(),
+								) {
+									rt.insert_message(msg.clone());
+
 									// Notify the user that the message was found
 									return (
 										Ok(Some(Event::MessageLoadCompleted { msg, req_id })),
