@@ -41,14 +41,14 @@ jobs:
       - name: Get Trunk
         run: cargo install trunk
       - name: Compile Demo
-        run: cd examples/chud-ui && trunk build && mv dist/* ../../
+        run: cd examples/chud-ui && trunk build
       - name: Setup Pages
         uses: actions/configure-pages@v3
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v2
         with:
           # Upload entire repository
-          path: '.'
+          path: './examples/chud-ui/dist/'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v2
