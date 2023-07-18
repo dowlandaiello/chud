@@ -36,6 +36,8 @@ jobs:
         with:
           toolchain: nightly
           target: wasm32-unknown-unknown
+          override: true
+          default: true
       - name: Get Trunk
         run: cargo install trunk
       - name: Compile Demo
