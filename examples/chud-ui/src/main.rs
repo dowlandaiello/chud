@@ -7,7 +7,7 @@ use futures::future::FutureExt;
 use leptos::{component, For, IntoView, ReadSignal, Scope, SignalUpdate, WriteSignal};
 use std::{future::Future, sync::Arc};
 
-const BOOTSTRAP_NODES: [&'static str; 1] = ["/ip4/35.89.250.247/tcp/6224/ws"];
+const BOOTSTRAP_NODES: [&'static str; 1] = ["/ip4/35.89.140.1/tcp/6224/wss"];
 const ENTER_KEY_KEYCODE: u32 = 13;
 
 #[component]

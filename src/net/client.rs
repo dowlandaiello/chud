@@ -415,7 +415,7 @@ impl Client {
 			// Listen for connections on the given port.
 			let address = Multiaddr::from(Ipv4Addr::UNSPECIFIED)
 				.with(Protocol::Tcp(listen_port))
-				.with(Protocol::Ws("/".into()));
+				.with(Protocol::Wss("/".into()));
 			swarm
 				.listen_on(address.clone())
 				.map_err(<TransportError<IoError> as Into<Error>>::into)?;
