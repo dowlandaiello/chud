@@ -8,6 +8,10 @@
 
 CHUD, the checkpoint of humanity underlying datastore, is a browser and server-based Blockchain based on captchas and messages with arbitrary data types. It is primarily meant to be used as a framework for more advanced blockchain applications.
 
+** Demo
+
+A live demo of the CHUD blockchain is available [[here][
+
 ** Usage
 
 CHUD is primarily meant to be used through its network ~Client~, which receives commands and emits events.
