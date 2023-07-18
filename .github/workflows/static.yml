@@ -41,7 +41,7 @@ jobs:
       - name: Get Trunk
         run: cargo install trunk
       - name: Compile Demo
-        run: cd examples/chud-ui && trunk build
+        run: cd examples/chud-ui && trunk build && sed 's/\/chud-ui/\/chud\/chud-ui/g' dist/index.html >> dist/index.html
       - name: Setup Pages
         uses: actions/configure-pages@v3
       - name: Upload artifact
