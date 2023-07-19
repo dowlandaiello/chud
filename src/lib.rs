@@ -55,6 +55,7 @@ pub fn start(chain_id: usize, bootstrap_nodes: Vec<js_sys::JsString>) {
 				nodes_owned,
 				None,
 				Vec::new(),
+				None,
 			)
 			.map(|_| ()),
 	);

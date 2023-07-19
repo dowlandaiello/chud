@@ -13,7 +13,7 @@ use std::{
 	fmt::{Display, Error as FmtError, Formatter},
 };
 
-pub type ConsensusRule = Box<dyn Fn(&Rt, &Message) -> bool>;
+pub type ConsensusRule = Box<dyn Fn(&Rt, &Message) -> bool + Send>;
 
 /// Events emitted by the message behavior
 #[derive(Debug)]
@@ -59,7 +59,7 @@ pub struct Context {
 }
 
 impl Context {
-	pub fn new(consensus_rules: Vec<Box<dyn Fn(&Rt, &Message) -> bool>>) -> Self {
+	pub fn new(consensus_rules: Vec<ConsensusRule>) -> Self {
 		Self { consensus_rules }
 	}
 

@@ -35,6 +35,9 @@ struct Args {
 
 	#[arg(short, long)]
 	external_addrs: Vec<String>,
+
+	#[arg(short, long)]
+	cert_path: Option<String>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -74,6 +77,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 			.into_iter()
 			.filter_map(|s| s.parse().ok())
 			.collect::<Vec<Multiaddr>>(),
+		args.cert_path,
 	);
 
 	futures::try_join!(

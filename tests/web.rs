@@ -42,7 +42,7 @@ async fn test_client_start() -> Result<(), Box<dyn Error>> {
 
 	let mut client = Client::new(0);
 	client
-		.start(rx, tx_resp, Vec::new(), None, Vec::new())
+		.start(rx, tx_resp, Vec::new(), None, Vec::new(), None)
 		.await?;
 
 	Ok(())

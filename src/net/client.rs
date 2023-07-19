@@ -45,17 +45,25 @@ use instant::Duration;
 #[cfg(not(target_arch = "wasm32"))]
 use libp2p::{
 	tcp::{tokio::Transport as TcpTransport, Config as TcpConfig},
-	websocket::WsConfig,
+	websocket::{
+		tls::{Certificate, Config as TlsConfig, Error as TlsError, PrivateKey},
+		WsConfig,
+	},
 };
 #[cfg(target_arch = "wasm32")]
 use libp2p_websys_transport::WebsocketTransport;
+#[cfg(not(target_arch = "wasm32"))]
+use openssl::{error::ErrorStack, pkcs12::Pkcs12};
 use serde::{Deserialize, Serialize};
 use std::{
 	cfg,
 	error::Error as StdError,
 	fmt::{Display, Error as FmtError, Formatter},
+	io::Error as IoError,
 	net::Ipv4Addr,
 };
+#[cfg(not(target_arch = "wasm32"))]
+use std::{fs::File as StdFile, io::Read};
 use wasm_timer::Interval;
 
 use wasm_bindgen::JsValue;
@@ -69,9 +77,10 @@ use tokio::{
 	io::{AsyncReadExt, AsyncWriteExt, Error as TokioError, Result as TokioResult},
 };
 
-use std::io::{Error as IoError, ErrorKind};
+use std::io::ErrorKind;
 
 /// An error that could be encountered by the client.
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug)]
 pub enum Error {
 	NoiseError(NoiseError),
@@ -82,6 +91,24 @@ pub enum Error {
 	SyncError(SyncError),
 	SerdeWasmError(SerdeWasmError),
 	RecvError(RecvError),
+	TlsError(TlsError),
+	IoError(IoError),
+	OpenSslError(ErrorStack),
+	MissingTlsKey,
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Debug)]
+pub enum Error {
+	NoiseError(NoiseError),
+	MultiaddrError(MultiaddrError),
+	NoKnownPeers,
+	DialError(DialError),
+	TransportError(TransportError<IoError>),
+	SyncError(SyncError),
+	SerdeWasmError(SerdeWasmError),
+	RecvError(RecvError),
+	IoError(IoError),
 }
 
 impl Into<JsValue> for Error {
@@ -138,6 +165,27 @@ impl From<RecvError> for Error {
 	}
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+impl From<TlsError> for Error {
+	fn from(e: TlsError) -> Self {
+		Self::TlsError(e)
+	}
+}
+
+impl From<IoError> for Error {
+	fn from(e: IoError) -> Self {
+		Self::IoError(e)
+	}
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<ErrorStack> for Error {
+	fn from(e: ErrorStack) -> Self {
+		Self::OpenSslError(e)
+	}
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 impl StdError for Error {
 	fn source(&self) -> Option<&(dyn StdError + 'static)> {
 		match self {
@@ -149,6 +197,27 @@ impl StdError for Error {
 			Self::SyncError(e) => Some(e),
 			Self::SerdeWasmError(e) => Some(e),
 			Self::RecvError(e) => Some(e),
+			Self::TlsError(e) => Some(e),
+			Self::IoError(e) => Some(e),
+			Self::OpenSslError(e) => Some(e),
+			Self::MissingTlsKey => None,
+		}
+	}
+}
+
+#[cfg(target_arch = "wasm32")]
+impl StdError for Error {
+	fn source(&self) -> Option<&(dyn StdError + 'static)> {
+		match self {
+			Self::NoiseError(e) => Some(e),
+			Self::MultiaddrError(e) => Some(e),
+			Self::NoKnownPeers => Some(&NoKnownPeers()),
+			Self::DialError(e) => Some(e),
+			Self::TransportError(e) => Some(e),
+			Self::SyncError(e) => Some(e),
+			Self::SerdeWasmError(e) => Some(e),
+			Self::RecvError(e) => Some(e),
+			Self::IoError(e) => Some(e),
 		}
 	}
 }
@@ -293,7 +362,7 @@ impl Client {
 	}
 
 	#[cfg(target_arch = "wasm32")]
-	fn build_swarm(&self) -> Result<Swarm<Behavior>, Error> {
+	fn build_swarm(&self, cert_path: Option<String>) -> Result<Swarm<Behavior>, Error> {
 		// Use WebSockets as a transport.
 		// TODO: Use webrtc in the future for p2p in browsers
 		let local_key = identity::Keypair::generate_ed25519();
@@ -339,13 +408,33 @@ impl Client {
 	}
 
 	#[cfg(not(target_arch = "wasm32"))]
-	fn build_swarm(&self) -> Result<Swarm<Behavior>, Error> {
+	fn build_swarm(&self, cert_path: Option<String>) -> Result<Swarm<Behavior>, Error> {
 		// Use WebSockets as a transport.
 		// TODO: Use webrtc in the future for p2p in browsers
 		let local_key = identity::Keypair::generate_ed25519();
 		let local_peer_id = PeerId::from(local_key.public());
 
-		let transport = WsConfig::new(TcpTransport::new(TcpConfig::new()))
+		let mut conf = WsConfig::new(TcpTransport::new(TcpConfig::new()));
+
+		if let Some(cert_path) = cert_path {
+			let mut b = Vec::new();
+			let mut f = StdFile::open(cert_path)?;
+			f.read_to_end(&mut b)?;
+
+			let data = Pkcs12::from_der(b.as_slice())?;
+			let parsed = data.parse2("")?;
+			let priv_key = PrivateKey::new(
+				parsed
+					.pkey
+					.ok_or(Error::MissingTlsKey)?
+					.private_key_to_der()?,
+			);
+			let cert = Certificate::new(parsed.cert.ok_or(Error::MissingTlsKey)?.to_der()?);
+
+			conf.set_tls_config(TlsConfig::new(priv_key, vec![cert])?);
+		}
+
+		let transport = conf
 			.upgrade(Version::V1Lazy)
 			.authenticate(NoiseConfig::new(&local_key)?)
 			.multiplex(MplexConfig::default())
@@ -393,8 +482,10 @@ impl Client {
 		bootstrap_peers: Vec<String>,
 		listen_port: Option<u16>,
 		external_addresses: Vec<Multiaddr>,
+		cert_path: Option<String>,
 	) -> Result<(), Error> {
-		let mut swarm = self.build_swarm()?;
+		let is_secure = cert_path.is_some();
+		let mut swarm = self.build_swarm(cert_path)?;
 
 		for external_addr in external_addresses {
 			swarm.add_external_address(external_addr);
@@ -415,7 +506,11 @@ impl Client {
 			// Listen for connections on the given port.
 			let address = Multiaddr::from(Ipv4Addr::UNSPECIFIED)
 				.with(Protocol::Tcp(listen_port))
-				.with(Protocol::Wss("/".into()));
+				.with(if is_secure {
+					Protocol::Wss("/".into())
+				} else {
+					Protocol::Ws("/".into())
+				});
 			swarm
 				.listen_on(address.clone())
 				.map_err(<TransportError<IoError> as Into<Error>>::into)?;
@@ -614,7 +709,7 @@ mod tests {
 
 		let client = Client::new(0);
 		client
-			.start(rx, tx_resp, Vec::new(), Some(6224), Vec::new())
+			.start(rx, tx_resp, Vec::new(), Some(6224), Vec::new(), None)
 			.await?;
 
 		Ok(())
@@ -629,7 +724,7 @@ mod tests {
 		let client = Client::new(0);
 		let join = tokio::spawn(async {
 			client
-				.start(rx, tx_resp, Vec::new(), Some(6224), Vec::new())
+				.start(rx, tx_resp, Vec::new(), Some(6224), Vec::new(), None)
 				.await
 				.map_err(|e| e.to_string())
 		});
@@ -665,7 +760,7 @@ mod tests {
 		let client = Client::new(0);
 		let join = tokio::spawn(async {
 			client
-				.start(rx, tx_resp, Vec::new(), Some(6224), Vec::new())
+				.start(rx, tx_resp, Vec::new(), Some(6224), Vec::new(), None)
 				.await
 				.map_err(|e| e.to_string())
 		});

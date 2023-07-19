@@ -43,12 +43,14 @@ env_logger = "0.10.0"
 clap = { version = "4.3.4", features = ["derive"] }
 actix-web = "4"
 actix-rt = "2.8.0"
+openssl = "0.10.55"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 libp2p-websys-transport = { git = "https://github.com/dowlandaiello/libp2p-websys-transport.git" }
 tokio = { version = "1.28.2", features = ["time"] }
 wasm-logger = "0.2.0"
 instant = { verion = "0.1", features = ["wasm-bindgen"] }
+libp2p = { git = "https://github.com/libp2p/rust-libp2p.git", features = ["macros", "noise", "wasm-bindgen", "floodsub", "rendezvous", "kad", "identify", "tokio", "websocket", "tcp", "request-response", "ping"] }
 
 [patch.crates-io]
 libp2p-core = { git = "https://github.com/libp2p/rust-libp2p.git" }
