@@ -38,7 +38,7 @@ wasm-timer = "0.2.5"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.28.2", features = ["fs", "io-util", "rt", "macros", "rt-multi-thread", "time"] }
-libp2p = { git = "https://github.com/libp2p/rust-libp2p.git", features = ["macros", "noise", "wasm-bindgen", "floodsub", "rendezvous", "kad", "identify", "tokio", "websocket", "tcp", "request-response", "ping"] }
+libp2p = { git = "https://github.com/libp2p/rust-libp2p.git", features = ["macros", "noise", "wasm-bindgen", "floodsub", "rendezvous", "kad", "identify", "tokio", "websocket", "tcp", "request-response", "ping", "dns"] }
 env_logger = "0.10.0"
 clap = { version = "4.3.4", features = ["derive"] }
 actix-web = "4"

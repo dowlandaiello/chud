@@ -44,6 +44,7 @@ use serde_wasm_bindgen::Error as SerdeWasmError;
 use instant::Duration;
 #[cfg(not(target_arch = "wasm32"))]
 use libp2p::{
+	dns::TokioDnsConfig,
 	tcp::{tokio::Transport as TcpTransport, Config as TcpConfig},
 	websocket::{
 		tls::{Certificate, Config as TlsConfig, Error as TlsError, PrivateKey},
@@ -414,8 +415,7 @@ impl Client {
 		let local_key = identity::Keypair::generate_ed25519();
 		let local_peer_id = PeerId::from(local_key.public());
 
-		let mut conf = WsConfig::new(TcpTransport::new(TcpConfig::new()));
-
+		let mut conf = WsConfig::new(TokioDnsConfig::system(TcpTransport::new(TcpConfig::new()))?);
 		if let Some(cert_path) = cert_path {
 			let mut b = Vec::new();
 			let mut f = StdFile::open(cert_path)?;
