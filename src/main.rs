@@ -36,7 +36,7 @@ struct Args {
 	#[arg(short, long)]
 	external_addrs: Vec<String>,
 
-	#[arg(short, long)]
+	#[arg(long)]
 	cert_path: Option<String>,
 }
 
