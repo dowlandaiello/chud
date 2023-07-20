@@ -1,4 +1,7 @@
-use super::super::{captcha::Captcha, crypto::hash::Hash};
+use super::{
+	super::{captcha::Captcha, crypto::hash::Hash},
+	CAPTCHA_ANS_LOOKBACK_FACTOR,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Error;
 
@@ -77,6 +80,19 @@ impl MessageData {
 	pub fn hashed(&self) -> Result<Hash, Error> {
 		let encoded = serde_json::to_vec(&self)?;
 		Ok(blake3::hash(encoded.as_slice()).into())
+	}
+
+	/// Calculates the hash of the transaction whose captcha this transaction
+	/// is answering.
+	pub fn lookback(&self) -> Option<usize> {
+		// Calculate the number of posts back to look for the answer based on
+		// the hash of the message
+		let h = self.hashed().ok()?;
+		let digits = hex::encode(h);
+		let relevant_digits = &digits[..CAPTCHA_ANS_LOOKBACK_FACTOR];
+
+		let lookback_bytes: [u8; 8] = hex::decode(relevant_digits).ok()?.try_into().ok()?;
+		Some(usize::from_le_bytes(lookback_bytes))
 	}
 }
 

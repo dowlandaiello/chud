@@ -140,6 +140,17 @@ impl Context {
 
 					Some(cond && longest_message.data().timestamp() < msg.data().timestamp())
 				})
+				// That the transaction from which the captcha is sourced is the correct source
+				.and_then(|cond| {
+					let lookback = msg.data().lookback()?;
+					let mut curr = msg;
+
+					for _ in 0..lookback {
+						curr = rt.get_message(curr.data().prev()?)?;
+					}
+
+					Some(cond && curr.data().captcha_src() == Some(curr.hash()))
+				})
 				// And that its captcha answer is valid
 				.and_then(|cond| {
 					rt.get_message(msg.data().captcha_src()?)
