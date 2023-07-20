@@ -146,7 +146,11 @@ impl Context {
 					let mut curr = msg;
 
 					for _ in 0..lookback {
-						curr = rt.get_message(curr.data().prev()?)?;
+						if let Some(prev) = curr.data().prev() {
+							curr = rt.get_message(prev)?;
+						} else {
+							curr = rt.get_message(rt.longest_chain()?)?;
+						}
 					}
 
 					Some(cond && curr.data().captcha_src() == Some(curr.hash()))
