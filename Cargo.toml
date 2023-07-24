@@ -12,10 +12,10 @@ name = "chudd"
 path = "src/main.rs"
 
 [dependencies]
-libp2p = { git = "https://github.com/libp2p/rust-libp2p.git", features = ["macros", "noise", "wasm-bindgen", "floodsub", "rendezvous", "kad", "identify", "request-response", "ping"] }
-libp2p-mplex = { git = "https://github.com/libp2p/rust-libp2p.git" }
-libp2p-request-response = { git = "https://github.com/libp2p/rust-libp2p.git", features = ["cbor"] }
-libp2p-autonat = { git = "https://github.com/libp2p/rust-libp2p.git" }
+libp2p = { version = "0.52.1", features = ["macros", "noise", "wasm-bindgen", "floodsub", "rendezvous", "kad", "identify", "request-response", "ping"] }
+libp2p-mplex = "0.40.0"
+libp2p-request-response = { version = "0.25.0", features = ["cbor"] }
+libp2p-autonat = "0.11.0"
 blake3 = "1.4.0"
 serde_json = "1.0.96"
 serde = { version = "1.0.164", features = ["derive"] }
@@ -38,7 +38,7 @@ wasm-timer = "0.2.5"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.28.2", features = ["fs", "io-util", "rt", "macros", "rt-multi-thread", "time"] }
-libp2p = { git = "https://github.com/libp2p/rust-libp2p.git", features = ["macros", "noise", "wasm-bindgen", "floodsub", "rendezvous", "kad", "identify", "tokio", "websocket", "tcp", "request-response", "ping", "dns"] }
+libp2p = { version = "0.52.1", features = ["macros", "noise", "wasm-bindgen", "floodsub", "rendezvous", "kad", "identify", "tokio", "websocket", "tcp", "request-response", "ping", "dns"] }
 env_logger = "0.10.0"
 clap = { version = "4.3.4", features = ["derive"] }
 actix-web = "4"
@@ -50,10 +50,7 @@ libp2p-websys-transport = { git = "https://github.com/dowlandaiello/libp2p-websy
 tokio = { version = "1.28.2", features = ["time"] }
 wasm-logger = "0.2.0"
 instant = { verion = "0.1", features = ["wasm-bindgen"] }
-libp2p = { git = "https://github.com/libp2p/rust-libp2p.git", features = ["macros", "noise", "wasm-bindgen", "floodsub", "rendezvous", "kad", "identify", "tokio", "websocket", "tcp", "request-response", "ping"] }
-
-[patch.crates-io]
-libp2p-core = { git = "https://github.com/libp2p/rust-libp2p.git" }
+libp2p = { version = "0.52.1", features = ["macros", "noise", "wasm-bindgen", "floodsub", "rendezvous", "kad", "identify", "tokio", "websocket", "tcp", "request-response", "ping"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.0"
