@@ -84,7 +84,7 @@ impl MessageData {
 
 	/// Calculates the hash of the transaction whose captcha this transaction
 	/// is answering.
-	pub fn lookback(&self) -> Option<usize> {
+	pub fn lookback(&self) -> Option<u64> {
 		// Calculate the number of posts back to look for the answer based on
 		// the hash of the message
 		let h = self.hashed().ok()?;
@@ -92,7 +92,7 @@ impl MessageData {
 		let relevant_digits = &digits[..CAPTCHA_ANS_LOOKBACK_FACTOR];
 
 		let lookback_bytes: [u8; 8] = hex::decode(relevant_digits).ok()?.try_into().ok()?;
-		Some(usize::from_le_bytes(lookback_bytes))
+		Some(u64::from_le_bytes(lookback_bytes))
 	}
 }
 

@@ -13,7 +13,7 @@ use std::{
 	fmt::{Display, Error as FmtError, Formatter},
 };
 
-pub type ConsensusRule = Box<dyn Fn(&Rt, &Message) -> bool + Send>;
+pub type ConsensusRule<'a> = &'a (dyn Fn(&Rt, &Message) -> bool + Send);
 
 /// Events emitted by the message behavior
 #[derive(Debug)]
@@ -54,18 +54,13 @@ impl From<SerdeError> for Error {
 
 /// A context that handles swarm events dealing with messages.
 #[derive(Default)]
-pub struct Context {
-	pub(crate) consensus_rules: Vec<ConsensusRule>,
-}
+pub struct Context;
 
 impl Context {
-	pub fn new(consensus_rules: Vec<ConsensusRule>) -> Self {
-		Self { consensus_rules }
-	}
-
 	pub fn poll(
 		&mut self,
 		rt: &mut Rt,
+		consensus_rule: ConsensusRule,
 		floodsub: &mut Floodsub,
 		in_event: Option<BehaviorEvent>,
 	) -> (Result<Option<Event>, Error>, Option<BehaviorEvent>) {
@@ -78,7 +73,7 @@ impl Context {
 					if let Ok(msg) = serde_json::from_slice::<Message>(&fs_msg.data) {
 						let hash = msg.hash().clone();
 
-						if self.follows_consensus_rules(rt, &msg) {
+						if self.follows_consensus_rules(rt, &msg, consensus_rule) {
 							info!(
 								"Added message {} to the blockchain at height {}",
 								hex::encode(msg.hash()),
@@ -123,7 +118,12 @@ impl Context {
 	/// - The message is at the front of the current longest_chain
 	/// - The captcha answer in the message is valid
 	/// - The captcha src is derived properly from the hash
-	fn follows_consensus_rules(&self, rt: &Rt, msg: &Message) -> bool {
+	fn follows_consensus_rules(
+		&self,
+		rt: &Rt,
+		msg: &Message,
+		consensus_rule: ConsensusRule,
+	) -> bool {
 		// Ensure the message was made before now
 		if instant::now() < msg.data().timestamp() as f64 {
 			return false;
@@ -172,17 +172,12 @@ impl Context {
 			};
 		}
 
-		for rule in self.consensus_rules.iter() {
-			if !rule(rt, msg) {
-				return false;
-			}
-		}
-
 		// Ensure the hash is valid
 		msg.data()
 			.hashed()
 			.ok()
 			.and_then(|hashed| Some(msg.hash() != &hashed))
 			.unwrap_or_default()
+			&& consensus_rule(rt, msg)
 	}
 }

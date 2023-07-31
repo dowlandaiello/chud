@@ -7,6 +7,7 @@ pub enum Cmd {
 	SubmitMsg { req: SubmitMsgReq, req_id: usize },
 	LoadMsg { req: LoadMsgReq, req_id: usize },
 	GetHead { req_id: usize },
+	Flush { req_id: usize },
 	Terminate,
 }
 
@@ -35,5 +36,6 @@ pub enum CmdResp {
 	MsgLoaded { msg: Message, req_id: usize },
 	HeadLoaded { hash: Hash, req_id: usize },
 	MsgReceived { msg: Message },
+	RuntimeFlushed { req_id: usize },
 	Error { error: String, req_id: usize },
 }

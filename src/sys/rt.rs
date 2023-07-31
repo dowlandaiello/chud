@@ -78,6 +78,12 @@ impl Rt {
 		let longest = self.longest_chain()?;
 		self.messages.get(&longest)
 	}
+
+	/// Resets the runtime.
+	pub fn flush(&mut self) {
+		self.messages = HashMap::default();
+		self.chains = Vec::default();
+	}
 }
 
 #[cfg(test)]

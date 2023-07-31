@@ -16,9 +16,11 @@ use crypto::hash::Hash;
 #[cfg(target_arch = "wasm32")]
 use js_sys::Function;
 #[cfg(target_arch = "wasm32")]
-use net::client::Error;
+use net::client::{Error, NetworkClient};
 #[cfg(target_arch = "wasm32")]
 use rpc::cmd::{Cmd, CmdResp, LoadMsgReq, SubmitMsgReq};
+#[cfg(target_arch = "wasm32")]
+use sys::{msg::Message, rt::Rt};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsValue;
 
@@ -38,6 +40,20 @@ lazy_static::lazy_static! {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn start(chain_id: usize, bootstrap_nodes: Vec<js_sys::JsString>) {
+	struct Client {
+		chain_id: usize,
+	}
+
+	impl NetworkClient for Client {
+		fn tx_follows_consensus_rules(&self, _rt: &Rt, _msg: &Message) -> bool {
+			true
+		}
+
+		fn chain_id(&self) -> usize {
+			self.chain_id
+		}
+	}
+
 	wasm_logger::init(wasm_logger::Config::default());
 
 	// Convert JS strings to str's
@@ -46,7 +62,7 @@ pub fn start(chain_id: usize, bootstrap_nodes: Vec<js_sys::JsString>) {
 		.filter_map(|js_str| js_str.as_string())
 		.collect::<Vec<String>>();
 
-	let mut client = net::client::Client::new(chain_id);
+	let mut client = Client { chain_id };
 	wasm_bindgen_futures::spawn_local(
 		client
 			.start(
@@ -204,4 +220,20 @@ pub async fn on_message(callback: Function) {
 			}
 		}
 	});
+}
+
+/// Clears the runtime.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub async fn flush() -> Result<(), String> {
+	let req_id = instant::now() as usize;
+	CMD_RX_TX
+		.0
+		.send(Cmd::Flush {
+			req_id: req_id as usize,
+		})
+		.await
+		.map_err(|e| e.to_string())?;
+
+	Ok(())
 }

@@ -1,4 +1,4 @@
-use chud::net::client::Client;
+use chud::net::client::{DefaultClient as Client, NetworkClient};
 
 #[cfg(not(target_arch = "wasm32"))]
 use actix_web::{web::Data, App, HttpServer};
@@ -65,9 +65,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 	.bind(("0.0.0.0", args.rpc_port))?
 	.run();
 
-	let client = Client::load_from_disk(args.chain_id)
-		.await
-		.expect("Failed to load client");
+	let mut client = Client::default();
 	let client_fut = client.start(
 		rx,
 		tx_resp,
