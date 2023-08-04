@@ -56,3 +56,4 @@ libp2p = { version = "0.52.1", features = ["macros", "noise", "wasm-bindgen", "f
 [dev-dependencies]
 wasm-bindgen-test = "0.3.0"
 leptos = "0.3.1"
+tokio-test = "0.4.2"

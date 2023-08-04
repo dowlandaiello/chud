@@ -123,6 +123,11 @@ impl Message {
 	pub fn hash(&self) -> &Hash {
 		&self.hash
 	}
+
+	/// Deserializes the data inside the message to some deserializable type.
+	pub fn as_data<'a, T: Deserialize<'a>>(&'a self) -> Result<T, Error> {
+		serde_json::from_slice(self.data().data())
+	}
 }
 
 #[cfg(test)]

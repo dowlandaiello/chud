@@ -129,17 +129,10 @@ impl Context {
 			return false;
 		};
 
-		// Ensure the message is the new head or is the genesis
-		if let Some(longest_chain) = rt.longest_chain() {
-			if !msg
-				.data()
-				.prev()
-				.and_then(|prev| Some(prev == longest_chain))
-				.and_then(|cond| {
-					let longest_message = rt.get_message(rt.longest_chain()?)?;
-
-					Some(cond && longest_message.data().timestamp() < msg.data().timestamp())
-				})
+		if let Some(prev) = msg.data().prev() {
+			if !rt
+				.get_message(prev)
+				.map(|prev_message| prev_message.data().timestamp() < msg.data().timestamp())
 				// That the transaction from which the captcha is sourced is the correct source
 				.and_then(|cond| {
 					let lookback = msg.data().lookback()?;
@@ -169,7 +162,7 @@ impl Context {
 				.unwrap_or_default()
 			{
 				return false;
-			};
+			}
 		}
 
 		// Ensure the hash is valid

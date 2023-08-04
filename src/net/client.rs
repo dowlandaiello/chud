@@ -506,14 +506,110 @@ impl Client {
 /// A client for a CHUD blockchain network.
 pub trait NetworkClient: Send + Sync + Sized + 'static {
 	/// Used for determining whether a transaction follows consensus rules.
-	/// Checked after default checks for transactions.
+	/// Rule is checked after default checks for transactions which include:
+	/// - That the timestamp of the message is strictly greater than the previous transaction
+	/// - That the transaction's captcha answer is correct
+	/// - That the transaction's chosen captcha conforms to the lookback consensus algorithm
+	/// - That the hash of the transaction is valid
+	///
+	/// # Arguments
+	///
+	/// * `msg` - A referene to the message to be verified.
+	/// * `rt` - A reference to the runtime which can be used for verification purposes. See example for more.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// use chud::{net::client::NetworkClient, sys::{rt::Rt, msg::Message}};
+	/// use serde::Deserialize;
+	///
+	/// #[derive(Deserialize)]
+	/// struct MyMessage {
+	///     flag: bool,
+	/// }
+	///
+	/// struct MyChainClient;
+	///
+	/// impl NetworkClient for MyChainClient {
+	///     fn tx_follows_consensus_rules(&self, rt: &Rt, msg: &Message) -> bool {
+	///         msg.as_data().map(|msg: MyMessage| msg.flag).unwrap_or_default()
+	///     }
+	///
+	///     fn chain_id(&self) -> usize {
+	///         0
+	///     }
+	/// }
+	/// ```
 	fn tx_follows_consensus_rules(&self, rt: &Rt, msg: &Message) -> bool;
 
 	/// A unique identifier for the blockchain differentiating it from other chains.
+	/// Currently used chain ID's include:
+	/// - 0: CHUD testing chain
+	/// - 1: CHUD testing chain 2
+	/// - 69: DubChan prototyping chain
+	///
+	/// Identifiers do not need to be strictly unique as long as the network is
+	/// fully disjoint, meaning that it connects to not bootstrap nodes of an
+	/// existing network.
 	fn chain_id(&self) -> usize;
 
-	/// Synchronizes and keep sthe client in sync with the network. Accepts
+	/// Synchronizes and keeps the client in sync with the network. Accepts
 	/// commands on a receiving channel for operations to perform.
+	/// Available commands are listed in the [`Cmd`] enum. Responses are
+	/// submitted to the response channel, which should be a different
+	/// async channel from the `cmd_rx`.
+	///
+	/// # Arguments
+	///
+	/// * `cmd_rx` - An `async_channel` receiver to which the client expects
+	/// commands to be sent. Commands can be thought of remote procedural calls,
+	/// just less high level. If you so desire to implement your own JSON-RPC API,
+	/// you can do so using this command interface.
+	/// * `resp_tx` - An `async_channel` sender to which the client sends
+	/// results of executed commands. Should be a separate channel from the
+	/// command channel.
+	/// * `bootstrap_peers` - An iterator of libp2p multiaddresses representing
+	/// peers to sync the initial blockchain from, and discover other peers
+	/// through.
+	/// * `listen_port` - The TCP port on which the p2p client should listen.
+	/// If no port is provided, then the peer will not be able to accept
+	/// connections, and only consume them.
+	/// * `external_addresses` - An iterator of libp2p multiaddresses
+	/// representing the interfaces the client should be aware that it is
+	/// listening on. Note that the client will always listen on the specified
+	/// port, it will simply not be aware of its own address if this argument
+	/// is not provided.
+	/// * `cert_path` - A path to a PKCS12-encoded TLS certificate to use for
+	/// encrypting connections.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// use chud::{net::client::NetworkClient, sys::{rt::Rt, msg::Message}, rpc::cmd::Cmd};
+	///
+	/// struct MyChainClient;
+	///
+	/// impl NetworkClient for MyChainClient {
+	///     fn tx_follows_consensus_rules(&self, _rt: &Rt, _msg: &Message) -> bool {
+	///         true
+	///     }
+	///
+	///     fn chain_id(&self) -> usize {
+	///         0
+	///     }
+	/// }
+	///
+	/// # tokio_test::block_on(async {
+	/// let client = MyChainClient;
+	/// let (mut tx, mut rx) = async_channel::unbounded();
+	/// let (tx_resp, rx_resp) = async_channel::unbounded();
+	///
+	/// tx.send(Cmd::Terminate).await.expect("channel send to succeed");
+	/// client.start(rx, tx_resp, ["/ip4/54.191.137.135/tcp/6224/ws"], Some(6224), ["/ip4/127.0.0.1/tcp/6224/ws".parse().expect("to be a valid multiaddr")], None)
+	///     .await
+	///     .expect("Failed to start client");
+	/// # })
+	/// ```
 	fn start<TIterBpeers, TIterExtAddrs, TBpeerAddr>(
 		self,
 		mut cmd_rx: Receiver<Cmd>,
